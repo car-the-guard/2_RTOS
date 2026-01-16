@@ -27,16 +27,6 @@ void cmain (void)
 
     BSP_Init(); /* Initialize BSP functions */
 
-    (void)SAL_GetVersion(&versionInfo);
-    mcu_printf("\n===============================\n");
-    mcu_printf("    MCU BSP Version: V%d.%d.%d\n",
-           versionInfo.viMajorVersion,
-           versionInfo.viMinorVersion,
-           versionInfo.viPatchVersion);
-    mcu_printf("-------------------------------\n");
-    // DisplayOTPInfo();
-    mcu_printf("===============================\n\n");
-
     // create the first app task...
     err = (SALRetCode_t)SAL_TaskCreate(&AppTaskStartID,
                          (const uint8 *)"App Task Start",
