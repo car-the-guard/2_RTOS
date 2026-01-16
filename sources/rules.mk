@@ -13,8 +13,11 @@
 
 MCU_BSP_PATH := $(MCU_BSP_BUILD_CURDIR)
 
+# Application 프로젝트 코드
+include $(MCU_BSP_PATH)/app.project/rules.mk
+
 # Application Sample
-include $(MCU_BSP_PATH)/app.sample/rules.mk
+# include $(MCU_BSP_PATH)/app.sample/rules.mk
 
 # Application Drivers
 include $(MCU_BSP_PATH)/app.drivers/rules.mk
