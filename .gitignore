@@ -1,0 +1,15 @@
+*.o
+*.obj
+*.d
+*.su
+*.map
+*.elf
+*.bin
+*.hex
+*.rom
+*.img
+*.log
+build/**/output/
+build/**/tcc70xx-freertos-debug/
+build/**/obj/
+.vscode/
