@@ -1,3 +1,3 @@
 #include <stdint.h>
 
-static void SoftwareDelay_us(uint32 us);
+void SoftwareDelay_us(uint32_t us);

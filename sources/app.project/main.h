@@ -2,6 +2,9 @@
 #define MAIN_H
 
 
+#define MCU_BSP_SUPPORT_APP_BASE 1
+#define MCU_BSP_SUPPORT_DRIVER_GIC 1
+
 #if ( MCU_BSP_SUPPORT_APP_BASE == 1 )
 
 /*

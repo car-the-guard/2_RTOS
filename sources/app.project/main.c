@@ -7,6 +7,8 @@
 #include <gpio.h>
 
 #include <stdio.h>
+#include "app_cfg.h"
+#include "sonar.h"
 
 static void Main_StartTask(void * pArg);
 
@@ -15,7 +17,6 @@ void cmain (void)
     static uint32           AppTaskStartID = 0;
     static uint32           AppTaskStartStk[ACFG_TASK_MEDIUM_STK_SIZE];
     SALRetCode_t            err;
-    SALMcuVersionInfo_t     versionInfo = {0,0,0,0};
 
     (void)SAL_Init();
 
@@ -41,34 +42,14 @@ void cmain (void)
         // start woring os.... never return from this function
         (void)SAL_OsStart();
     }
-    return 0;
 }
 
 static void Main_StartTask(void * pArg)
 {
-     (void)pArg;
+    (void)pArg;
     (void)SAL_OsInitFuncs();
 
-    uint32 led_pins[4] = {
-        GPIO_GPB(1),
-        GPIO_GPA(13),
-        GPIO_GPB(10),
-        GPIO_GPB(27)
-    };
+    // SONAR_init();
 
-    for (int i = 0; i < 4; i++) {
-        GPIO_Config(led_pins[i], (GPIO_FUNC(0) | GPIO_OUTPUT));
-        GPIO_Set(led_pins[i], 1); 
-    }
-
-    while (1) {
-        for (int i = 0; i < 4; i++) {
-            GPIO_Set(led_pins[i], 0); 
-            SAL_TaskSleep(500);
-        }
-        for (int i = 3; i >= 0; i--) {
-            GPIO_Set(led_pins[i], 1); 
-            SAL_TaskSleep(500);
-        }
-    }
+    SONAR_start_task();
 }
