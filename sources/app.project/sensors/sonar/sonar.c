@@ -7,10 +7,6 @@
 #include "sonar.h"
 #include "utils.h"
 
-// -----------------------------------------------------------
-// [설정] 인터럽트 ID 및 트리거 타입
-// -----------------------------------------------------------
-// 주의: IRQ ID 54번은 예시입니다. 동작하지 않으면 회로도/매뉴얼 확인 필요.
 #define SONAR_IRQ_ID        GIC_EXT1  
 
 // 전역 변수
@@ -19,28 +15,19 @@ volatile uint32_t g_echo_end_time = 0;
 volatile uint32_t g_pulse_width = 0;
 volatile uint8_t  g_capture_done = 0;
 
-// -----------------------------------------------------------
-// [에러 해결 1] SAL_GetTickCount 매크로 올바르게 사용하기
-// -----------------------------------------------------------
+
 uint32_t BSP_GetMicros(void)
 {
     // SAL_GetTickCount는 매크로이며, 값을 담을 변수의 '주소'를 인자로 받습니다.
     // 반환값은 성공/실패 코드이고, 실제 시간 값은 인자로 넘긴 변수에 담깁니다.
     
-    uint64_t tick_val = 0; // 64비트 혹은 32비트 (SDK 버전에 따라 다름, 넉넉히 64 잡음)
+    uint32_t tick_val = 0;
     
     // extern 선언 제거함 (헤더에 이미 매크로로 있음)
     SAL_GetTickCount(&tick_val); 
 
     // ms 단위를 us로 변환 (정밀도는 떨어짐)
     return (uint32_t)(tick_val * 1000); 
-}
-
-uint32_t BSP_GetMicros_Simulated(void) {
-    // Topst SDK에 us 단위 타이머가 없다면, 
-    // 반복문 횟수로 시간을 짐작해야 합니다. (임시 방편)
-    static volatile uint32_t loop_cnt = 0;
-    return loop_cnt++;
 }
 
 // ISR 함수 프로토타입
@@ -54,7 +41,7 @@ void SONAR_init(void)
 {
     mcu_printf("SONAR_INIT_START\n");
 
-    // 1. Trig: 출력 (Low 초기화)
+    // 1. Trig: 출력
     GPIO_Config(SONAR_TRIG_PIN, GPIO_OUTPUT | GPIO_FUNC(0) | GPIO_NOPULL);
     GPIO_Set(SONAR_TRIG_PIN, 0);
 
@@ -64,7 +51,7 @@ void SONAR_init(void)
     //        하지만 안전하게 일단 PULLUP 유지해도 동작은 합니다.
     GPIO_Config(SONAR_ECHO_PIN, GPIO_INPUT | GPIO_FUNC(0) | GPIO_INPUTBUF_EN | GPIO_PULLUP);
     
-    // 3. 인터럽트 연결 [핵심 수정 부분!]
+    // 3. 인터럽트 연결 
     // SONAR_IRQ_ID(GIC번호)가 아니라, 채널 번호 '1'을 넣어야 합니다.
     // GPB_01 핀은 보통 EXT_INT_1 채널에 연결됩니다.
     GPIO_IntExtSet(1, SONAR_ECHO_PIN); 
@@ -88,26 +75,6 @@ void SONAR_read_sensor(void)
     GPIO_Set(SONAR_TRIG_PIN, 0U);
 }
 
-// void SONAR_start_task(void)
-// {
-//     SONAR_init(); // 초기화
-
-//     for(;;)
-//     {
-//         SONAR_read_sensor();
-        
-//         // 100ms 대기 (초음파 왕복 대기)
-//         SAL_TaskSleep(100);
-
-//         // 거리 계산 및 출력
-//         int32_t dist = SONAR_get_distance();
-//         // if(dist >= 0) {
-//             // 디버그용 로그 (필요시 주석 해제)
-//             mcu_printf("Sonar Dist: %d cm\n", (int)dist);
-//         // }
-//     }
-// }
-
 void SONAR_start_task(void)
 {
     mcu_printf("SONAR Polling Mode Start\n");
@@ -130,30 +97,46 @@ void SONAR_start_task(void)
         // -----------------------------------------------------
         // 2. Echo 신호 대기 (LOW -> HIGH 될 때까지 대기)
         // -----------------------------------------------------
-        uint32_t wait_timeout = 0;
+        // 200MHz 클럭 기준: 1us ≈ 200 사이클
+        // 루프 한 번 (GPIO_Get + 비교 + 증가 + 점프) ≈ 40-50 사이클
+        // 1us ≈ 4-5 루프 (보수적으로 4로 계산)
+        #define LOOPS_PER_US 4  // 200MHz 기준: 루프당 약 50 사이클 가정
+        
+        uint32_t wait_timeout_loops = 30000 * LOOPS_PER_US; // 30ms 타임아웃
+        uint32_t wait_count = 0;
         while(GPIO_Get(SONAR_ECHO_PIN) == 0) {
-            wait_timeout++;
-            if(wait_timeout > 200000) break; // 타임아웃
+            wait_count++;
+            if(wait_count > wait_timeout_loops) {
+                wait_count = 0; // 타임아웃 플래그
+                break;
+            }
         }
 
-        if(wait_timeout <= 200000) {
+        if(wait_count != 0) {
             // -----------------------------------------------------
             // 3. Echo 지속 시간 측정 (HIGH -> LOW 될 때까지)
+            // 200MHz 클럭 기준으로 루프 횟수를 마이크로초로 변환
             // -----------------------------------------------------
             uint32_t pulse_len = 0;
+            uint32_t pulse_timeout_loops = 30000 * LOOPS_PER_US; // 30ms 타임아웃 (약 5m 거리)
+            
             while(GPIO_Get(SONAR_ECHO_PIN) == 1) {
                 pulse_len++;
                 // 무한루프 방지
-                if(pulse_len > 200000) break; 
+                if(pulse_len > pulse_timeout_loops) break;
             }
             
-            // pulse_len은 '시간'이 아니라 '루프 횟수'입니다.
-            // 정확한 cm는 아니지만, 거리에 비례해서 숫자가 커져야 합니다.
-            // 대략적인 보정치(캘리브레이션)를 곱해서 cm로 만듭니다.
-            // (보드 속도에 따라 이 나누기 값을 조절해야 함)
-            uint32_t estimated_dist = pulse_len / 60; 
+            // 루프 횟수를 마이크로초로 변환
+            // 200MHz에서 1us = 200 사이클, 루프 한 번 ≈ 50 사이클
+            uint32_t pulse_width_us = pulse_len / LOOPS_PER_US;
+            
+            // HC-SR04 거리 계산: 거리(cm) = 펄스폭(us) / 58
+            // 음속 343m/s = 34300cm/s = 0.0343cm/us
+            // 왕복 거리이므로: 거리 = (펄스폭 * 0.0343) / 2 = 펄스폭 / 58.3 ≈ 펄스폭 / 58
+            // uint32_t distance_cm = pulse_width_us / 58;
+            uint32_t distance_cm = pulse_width_us / 7.2;
 
-            mcu_printf("Dist: %d cm (Raw: %d)\n", (int)estimated_dist, (int)pulse_len);
+            // mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
         } 
         else {
             mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
@@ -173,9 +156,8 @@ int32_t SONAR_get_distance(void)
     return -1;
 }
 
-// -----------------------------------------------------------
-// [에러 해결 2] GIC_IntClr 제거 (SDK가 자동 처리)
-// -----------------------------------------------------------
+// 우선 Polling 방식으로 구현되어있음.
+// 이후에 시간이 되면 이거 인터럽트 방식으로 전환하기
 static void SONAR_ISR_handler(void *pArg)
 {
     uint32_t pin = (uint32_t)pArg;
