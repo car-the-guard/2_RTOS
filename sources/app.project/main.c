@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "app_cfg.h"
 #include "sonar.h"
+#include "accel.h" // 헤더 포함
 
 static void Main_StartTask(void * pArg);
 
@@ -28,6 +29,7 @@ void cmain (void)
 
     BSP_Init(); /* Initialize BSP functions */
 
+    
     // create the first app task...
     err = (SALRetCode_t)SAL_TaskCreate(&AppTaskStartID,
                          (const uint8 *)"App Task Start",
@@ -36,7 +38,6 @@ void cmain (void)
                          ACFG_TASK_MEDIUM_STK_SIZE,
                          SAL_PRIO_APP_CFG,
                          NULL);
-
     if (err == SAL_RET_SUCCESS)
     {
         // start woring os.... never return from this function
@@ -51,5 +52,13 @@ static void Main_StartTask(void * pArg)
 
     // SONAR_init();
 
-    SONAR_start_task();
+    // SONAR_start_task();
+    // MPU6050_init();
+    // [추가] MPU6050 태스크 시작!
+    MPU6050_start_task();
+
+    for(;;)
+    {
+        SAL_TaskSleep(1000);
+    }
 }

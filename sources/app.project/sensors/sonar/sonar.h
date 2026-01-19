@@ -17,7 +17,7 @@ void SONAR_start_task(void);
 // 센서 트리거 발생 함수
 void SONAR_read_sensor(void);
 
-// 계산된 거리값을 가져오는 함수 (이름 변경: get_data -> get_distance)
+// 계산된 거리값을 가져오는 함수
 int32_t SONAR_get_distance(void);
 
 #endif // SONAR_H
