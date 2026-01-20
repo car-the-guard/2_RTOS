@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 // 핀 설정
-#define SONAR_TRIG_PIN    GPIO_GPB(1)
-#define SONAR_ECHO_PIN    GPIO_GPA(13)
+#define SONAR_TRIG_PIN    GPIO_GPB(10)
+#define SONAR_ECHO_PIN    GPIO_GPB(27)
 
 // 초기화 함수
 void SONAR_init(void);
