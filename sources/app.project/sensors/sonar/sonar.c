@@ -51,10 +51,8 @@ void SONAR_init(void)
     //        하지만 안전하게 일단 PULLUP 유지해도 동작은 합니다.
     GPIO_Config(SONAR_ECHO_PIN, GPIO_INPUT | GPIO_FUNC(0) | GPIO_INPUTBUF_EN | GPIO_PULLUP);
     
-    // 3. 인터럽트 연결 
-    // SONAR_IRQ_ID(GIC번호)가 아니라, 채널 번호 '1'을 넣어야 합니다.
-    // GPB_01 핀은 보통 EXT_INT_1 채널에 연결됩니다.
-    GPIO_IntExtSet(1, SONAR_ECHO_PIN); 
+    // 3. 인터럽트 연결 (GIC ID와 GPIO 핀 연결)
+    GPIO_IntExtSet(SONAR_IRQ_ID, SONAR_ECHO_PIN);
 
     // 4. GIC 핸들러 등록
     // 여기는 GIC 번호(SONAR_IRQ_ID)를 쓰는 것이 맞습니다.
@@ -63,7 +61,7 @@ void SONAR_init(void)
     // 5. 인터럽트 활성화
     GIC_IntSrcEn(SONAR_IRQ_ID);
 
-    mcu_printf("SONAR_INIT_DONE (Channel: 1, IRQ: %d)\n", SONAR_IRQ_ID);
+    mcu_printf("SONAR_INIT_DONE (TRIG: GPB10, ECHO: GPB27, IRQ: %d)\n", SONAR_IRQ_ID);
 }
 
 void SONAR_read_sensor(void)
@@ -77,6 +75,8 @@ void SONAR_read_sensor(void)
 
 void SONAR_start_task(void)
 {
+    SONAR_init();
+
     mcu_printf("SONAR Polling Mode Start\n");
 
     // 1. 핀 설정 (입력 버퍼 필수!)
@@ -85,14 +85,18 @@ void SONAR_start_task(void)
     
     GPIO_Set(SONAR_TRIG_PIN, 0);
 
+    mcu_printf("ECHO pin state: %d\n", GPIO_Get(SONAR_ECHO_PIN));
+
     for(;;)
     {
         // -----------------------------------------------------
         // 1. Trigger 발송 (시간 넉넉하게)
         // -----------------------------------------------------
+        // mcu_printf("TRIG...\n");
         GPIO_Set(SONAR_TRIG_PIN, 1U);
         SoftwareDelay_us(500); // 10us -> 500us로 대폭 증가
         GPIO_Set(SONAR_TRIG_PIN, 0U);
+        // mcu_printf("Waiting ECHO...\n");
 
         // -----------------------------------------------------
         // 2. Echo 신호 대기 (LOW -> HIGH 될 때까지 대기)
@@ -136,7 +140,7 @@ void SONAR_start_task(void)
             // uint32_t distance_cm = pulse_width_us / 58;
             uint32_t distance_cm = pulse_width_us / 7.2;
 
-            // mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
+            mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
         } 
         else {
             mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
