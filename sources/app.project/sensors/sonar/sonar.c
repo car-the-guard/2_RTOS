@@ -1,6 +1,8 @@
 #include <bsp.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sal_api.h>
+#include <app_cfg.h>
 
 #include "gpio.h"
 #include "gic.h"     
@@ -9,7 +11,17 @@
 
 #define SONAR_IRQ_ID        GIC_EXT1  
 
-// 전역 변수
+// =========================================================
+// 설정 및 전역 변수
+// =========================================================
+#define SONAR_TASK_STK_SIZE     (2048)
+#define SONAR_TASK_PRIO         (SAL_PRIO_APP_CFG)
+
+// 태스크 관련 변수
+static uint32 g_sonar_task_id = 0;
+static uint32 g_sonar_task_stk[SONAR_TASK_STK_SIZE];
+
+// 전역 변수 (인터럽트 방식용)
 volatile uint32_t g_echo_start_time = 0;
 volatile uint32_t g_echo_end_time = 0;
 volatile uint32_t g_pulse_width = 0;
@@ -32,6 +44,9 @@ uint32_t BSP_GetMicros(void)
 
 // ISR 함수 프로토타입
 static void SONAR_ISR_handler(void *pArg);
+
+// 태스크 함수 프로토타입
+static void Task_Sonar(void *pArg);
 
 // -----------------------------------------------------------
 // 함수 구현
@@ -73,9 +88,12 @@ void SONAR_read_sensor(void)
     GPIO_Set(SONAR_TRIG_PIN, 0U);
 }
 
-void SONAR_start_task(void)
+// =========================================================
+// 태스크 함수
+// =========================================================
+static void Task_Sonar(void *pArg)
 {
-    SONAR_init();
+    (void)pArg;
 
     mcu_printf("SONAR Polling Mode Start\n");
 
@@ -148,6 +166,34 @@ void SONAR_start_task(void)
 
         SAL_TaskSleep(100);
     }
+}
+
+// =========================================================
+// 태스크 시작 함수
+// =========================================================
+void SONAR_start_task(void)
+{
+    SALRetCode_t ret;
+
+    SONAR_init();
+
+    ret = (SALRetCode_t)SAL_TaskCreate(
+        &g_sonar_task_id,
+        (const uint8 *)"Sonar Task",
+        (SALTaskFunc)Task_Sonar,
+        &g_sonar_task_stk[0],
+        SONAR_TASK_STK_SIZE,
+        SONAR_TASK_PRIO,
+        NULL
+    );
+
+    if (ret != SAL_RET_SUCCESS)
+    {
+        mcu_printf("[SONAR] Task create failed: %d\n", ret);
+        return;
+    }
+
+    mcu_printf("[SONAR] Task created successfully\n");
 }
 
 
