@@ -1,7 +1,8 @@
 /*
  * can_bridge.c
  *
- * CAN 메시지 소비 함수 구현
+ *  Created on: Jan 3, 2026
+ *      Author: mokta
  */
 
 #include <sal_api.h>
@@ -10,6 +11,10 @@
 #include "can.h"  // 프로젝트의 can.h
 #include "can_config.h"
 #include <can.h>  // dev.drivers의 CAN 헤더 (전역 경로)
+#include "utils.h"
+
+// grid_led.h는 필요시 추가
+// #include "grid_led.h"
 
 /* -------------------------------------------------------------------------
    CAN 메시지 소비 함수
@@ -17,18 +22,25 @@
 void CAN_consume_rx_message(const void *pRxHeader, CAN_payload_t rxPayload)
 {
     const CANMessage_t *pMsg = (const CANMessage_t *)pRxHeader;
+    uint32_t id = pMsg->mId;
     
-    (void)rxPayload;
-    
-    // TODO: 실제 메시지 처리 로직 구현
-    // 예: 특정 ID에 따라 다른 처리 수행
-    // 예: 센서 데이터 업데이트, 상태 변경 등
-    
-    mcu_printf("[CAN_BRIDGE] Received message ID: 0x%03X\r\n", pMsg->mId);
-    
-    // CRC 검증 (필요시)
-    // if(calculate_CRC8(rxPayload.raw, 7) != rxPayload.field.CRC_8) {
-    //     mcu_printf("[CAN_BRIDGE] CRC Doesn't Match\r\n");
-    //     return;
-    // }
+    switch(id)
+    {
+        case CAN_type_break_led:
+            CAN_receive_led_signal(rxPayload.field.data.u8_val);
+            break;
+        default:
+            mcu_printf("[CAN_BRIDGE] Unknown message ID: 0x%03X\r\n", id);
+            break;
+    }
+}
+
+/* -------------------------------------------------------------------------
+   수신 메시지 처리 함수들
+   ------------------------------------------------------------------------- */
+void CAN_receive_led_signal(uint8_t type)
+{
+    // TODO: grid_led.h의 GRIDLED_SetState 함수 호출
+    // GRIDLED_SetState((GridLed_State_t) type);
+    mcu_printf("[CAN_BRIDGE] LED signal received: 0x%02X\r\n", type);
 }

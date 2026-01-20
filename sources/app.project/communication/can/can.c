@@ -79,7 +79,7 @@ void Print_Hex_8Bytes(uint8_t *data)
 /* -------------------------------------------------------------------------
    메모리 풀 관리 함수
    ------------------------------------------------------------------------- */
-static CAN_queue_pkt_t* CAN_AllocPool(void)
+CAN_queue_pkt_t* CAN_AllocPool(void)
 {
     SAL_CoreCriticalEnter();
     
@@ -183,7 +183,7 @@ void CAN_init(void)
     
     if (queueRet != SAL_RET_SUCCESS)
     {
-        mcu_printf("[CAN] Queue create failed: %d\r\n", ret);
+        mcu_printf("[CAN] Queue create failed: %d\r\n", queueRet);
         return;
     }
     
@@ -334,4 +334,75 @@ void CAN_start_task(void)
     }
     
     mcu_printf("[CAN] Task created successfully\r\n");
+}
+
+/* -------------------------------------------------------------------------
+   메시지 전송 함수들 (외부 API)
+   ------------------------------------------------------------------------- */
+void CAN_send_message(uint16_t id, CAN_queue_pkt_t *pPacket)
+{
+    if (pPacket == NULL_PTR)
+        return;
+    
+    SALRetCode_t ret = SAL_QueuePut(g_canTxQueueHandle,
+                                    &pPacket,
+                                    sizeof(CAN_queue_pkt_t*),
+                                    0,  // timeout
+                                    0); // blocking option
+    
+    if (ret != SAL_RET_SUCCESS)
+    {
+        mcu_printf("[CAN] Queue put failed: %d\r\n", ret);
+        CAN_FreePool(pPacket);  // 실패 시 풀에 반환
+    }
+}
+
+void CAN_send_collision(void)
+{
+    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
+    
+    if (pPacket != NULL_PTR)
+    {
+        pPacket->id = CAN_type_collision;
+        pPacket->body.field.data.u8_val = 0xFF;
+        CAN_send_message(CAN_type_collision, pPacket);
+    }
+}
+
+void CAN_send_sonar(uint16_t distance0, uint16_t distance1)
+{
+    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
+    
+    if (pPacket != NULL_PTR)
+    {
+        pPacket->id = CAN_type_sonar;
+        pPacket->body.field.data.dual_u16.val_A = distance0;
+        pPacket->body.field.data.dual_u16.val_B = distance1;
+        CAN_send_message(CAN_type_sonar, pPacket);
+    }
+}
+
+void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered)
+{
+    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
+    
+    if (pPacket != NULL_PTR)
+    {
+        pPacket->id = CAN_type_accel;
+        pPacket->body.field.data.dual_u16.val_A = accel_moment;
+        pPacket->body.field.data.dual_u16.val_B = accel_filtered;
+        CAN_send_message(CAN_type_accel, pPacket);
+    }
+}
+
+void CAN_send_compass(uint16_t heading)
+{
+    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
+    
+    if (pPacket != NULL_PTR)
+    {
+        pPacket->id = CAN_type_compass;
+        pPacket->body.field.data.u16_val = heading;
+        CAN_send_message(CAN_type_compass, pPacket);
+    }
 }

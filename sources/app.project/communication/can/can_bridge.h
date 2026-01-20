@@ -10,4 +10,7 @@
 // 실제 구현은 can_bridge.c에서 (필요시 별도 파일로 분리 가능)
 void CAN_consume_rx_message(const void *pRxHeader, CAN_payload_t rxPayload);
 
+// 수신 메시지 처리 함수들
+void CAN_receive_led_signal(uint8_t type);
+
 #endif // CAN_BRIDGE_H

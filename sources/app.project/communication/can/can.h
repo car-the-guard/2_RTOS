@@ -14,6 +14,7 @@
 
 // CAN 메시지 타입 정의
 #define CAN_type_break_led    0x20
+#define CAN_type_collision     0x21
 #define CAN_type_sonar        0x24
 #define CAN_type_compass      0x24
 #define CAN_type_accel        0x2C
@@ -51,5 +52,11 @@ typedef struct {
 /* 함수 원형 선언 */
 void CAN_init(void);        				// 필터 설정 및 CAN 시작 함수
 void CAN_start_task(void); 					// 태스크 시작 함수
+
+// 메시지 전송 함수들
+void CAN_send_collision(void);
+void CAN_send_sonar(uint16_t distance0, uint16_t distance1);
+void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered);
+void CAN_send_compass(uint16_t heading);
 
 #endif /* CAN_H */
