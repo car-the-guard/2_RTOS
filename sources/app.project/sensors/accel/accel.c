@@ -1,222 +1,225 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /*
- * mpu6050_task.c
- */
+***************************************************************************************************
+* FileName : accel.c
+* Description : MPU6050 I2C Driver & Task Implementation (Final Fixed Version)
+***************************************************************************************************
+*/
 
- #include "accel.h"
- #include <sal_api.h>
- #include <app_cfg.h>
- #include <debug.h>
- #include <bsp.h>
- #include <stdint.h>
+#include <sal_api.h>
+#include "accel.h"
+#include "i2c.h"
+#include "gpio.h"
+#include "app_cfg.h"
+#include <bsp.h>
+#include "sal_internal.h"
+#include <stdint.h>
+#include <debug.h> 
 
- #include "i2c.h"
- #include "gpio.h"
+/* ========================================================================= */
+/* DEFINITIONS                                                               */
+/* ========================================================================= */
 
- #define I2C_CH_ACCEL        I2C_CH_MASTER0
- #define I2C_PORT_SEL        1   // 핀 mux 설정 (보통 0번, 안 되면 1, 2 변경 시도)
- #define I2C_SPEED_HZ        400 // 400kHz /* [TODO] I2C 드라이버 헤더 추가 (예: tcc_i2c.h) */
+// I2C 설정 (SCL: B0, SDA: B1 -> Port Index 0 사용)
+#define MPU_I2C_CH          I2C_CH_MASTER0
+#define MPU_I2C_PORT_IDX    0UL
+#define MPU_I2C_SPEED       100UL   // 100kHz (안정성 최우선)
 
- // #include "tcc_i2c.h"
- 
- // =========================================================
- // 설정 및 전역 변수
- // =========================================================
- #define MPU_TASK_STK_SIZE   (4096)       // 스택 사이즈 (상황에 맞춰 조정)
- #define MPU_TASK_PRIO       (SAL_PRIO_APP_CFG) // 우선순위 (Main과 동일하게 설정 예시)
- #define MPU6050_ADDR        0x68
- 
- // 태스크 관리를 위한 정적 변수 (SAL 필수)
- static uint32 MpuTaskID = 0;
- static uint32 MpuTaskStk[MPU_TASK_STK_SIZE];
- 
- // 데이터 공유용 구조체 및 뮤텍스
- static MPU6050_Data_t g_mpu_data = {0};
- // static SALMutexId_t g_mpu_mutex; // (만약 SAL에 뮤텍스가 있다면 사용)
- 
- // =========================================================
-// I2C 래퍼 함수 구현 (SDK: i2c.h 사용)
-// =========================================================
+// MPU6050 레지스터 및 주소
+#define MPU6050_ADDR        0x68    // 7-bit Address
+#define REG_PWR_MGMT_1      0x6B    // 전원 관리 (Sleep 해제용)
+#define REG_ACCEL_CONFIG    0x1C    // 가속도 범위 설정
+#define REG_ACCEL_XOUT_H    0x3B    // 데이터 시작 주소
+#define REG_WHO_AM_I        0x75    // ID 확인
 
-/* I2C 쓰기: [레지스터 주소] -> [데이터] */
-static int8_t VCPG_I2C_Write(uint8_t slave_addr, uint8_t reg, uint8_t data)
+// 가속도 감도 (기본값 +/- 2g 설정 시 16384 LSB/g)
+#define ACCEL_SENSITIVITY   16384.0
+
+/* ========================================================================= */
+/* LOCAL VARIABLES                                                           */
+/* ========================================================================= */
+
+// 스택 크기 1024 (printf 및 실수 연산 보호)
+static uint32 g_MpuTaskStk[1024]; 
+
+// 최신 센서 데이터를 저장하는 공유 변수
+static MPU6050_Data_t g_SensorData;
+
+/* ========================================================================= */
+/* INTERNAL FUNCTIONS (FIXED DRIVER)                                         */
+/* ========================================================================= */
+
+// [수정 1] 쓰기 함수 개선 (버퍼 합치기 + 주소 시프트)
+// 호환성을 위해 [레지스터주소 + 데이터]를 하나의 배열로 묶어서 보내며,
+// I2C 주소에 << 1을 적용합니다.
+static SALRetCode_t MPU6050_WriteReg(uint8 reg, uint8 data)
 {
-    SALRetCode_t ret;
-    I2CXfer_t xfer = {0};
-    
-    // SDK 구조체 설정
-    uint8_t cmd_buf[1] = {reg};
-    uint8_t out_buf[1] = {data};
+    uint8 buf[2];
+    buf[0] = reg;
+    buf[1] = data;
 
-    xfer.xCmdBuf = cmd_buf; // 레지스터 주소
-    xfer.xCmdLen = 1;
-    xfer.xOutBuf = out_buf; // 쓸 데이터
-    xfer.xOutLen = 1;
-    xfer.xOpt    = 0;       // 옵션 없음
-
-    // I2C_XferCmd(채널, 주소, 구조체, 비동기여부)
-    // ucAsync = 0 (Sync 모드)으로 호출하여 완료될 때까지 대기
-    ret = I2C_XferCmd(I2C_CH_ACCEL, slave_addr, xfer, 0);
-
-    if (ret != SAL_RET_SUCCESS) {
-        mcu_printf("[I2C Write Error] Ret: %d\n\r", ret);
-        return -1;
-    }
-    return 0;
-}
-
-/* I2C 읽기: [레지스터 주소] -> (Restart) -> [데이터 수신] */
-static int8_t VCPG_I2C_Read(uint8_t slave_addr, uint8_t reg, uint8_t *pBuf, uint16_t len)
-{
-    SALRetCode_t ret;
-    I2CXfer_t xfer = {0};
-    
-    uint8_t cmd_buf[1] = {reg};
-
-    xfer.xCmdBuf = cmd_buf; // 레지스터 주소
-    xfer.xCmdLen = 1;
-    xfer.xInBuf  = pBuf;    // 읽은 데이터 저장할 곳
-    xfer.xInLen  = len;     // 읽을 길이
+    I2CXfer_t xfer;
+    xfer.xCmdBuf = buf;      // [주소, 데이터]를 통째로 전송
+    xfer.xCmdLen = 2;        // 길이 2바이트
+    xfer.xOutBuf = NULL;
+    xfer.xOutLen = 0;
+    xfer.xInBuf  = NULL;
+    xfer.xInLen  = 0;
     xfer.xOpt    = 0;
 
-    // ucAsync = 0 (Sync 모드)
-    ret = I2C_XferCmd(I2C_CH_ACCEL, slave_addr, xfer, 0);
-
-    if (ret != SAL_RET_SUCCESS) {
-        // 읽기 실패 시 로그 출력
-        // mcu_printf("[I2C Read Error] Ret: %d\n\r", ret);
-        return -1;
-    }
-    return 0;
+    // [중요] MPU6050_ADDR << 1 적용
+    return I2C_Xfer(MPU_I2C_CH, (uint8)(MPU6050_ADDR << 1), xfer, 0); 
 }
- 
- // =========================================================
- // 태스크 본체 (Task Function)
- // =========================================================
- static void Task_MPU6050(void * pArg)
- {
-     (void)pArg;
-     uint8_t buffer[6];
-     uint8_t chip_id = 0;
 
-     SALRetCode_t i2c_ret;
+// [수정 2] 읽기 함수 개선 (주소 시프트)
+static SALRetCode_t MPU6050_ReadRegs(uint8 startReg, uint8 *pBuf, uint8 len)
+{
+    I2CXfer_t xfer;
+    xfer.xCmdBuf = &startReg;
+    xfer.xCmdLen = 1;
+    xfer.xOutBuf = NULL;
+    xfer.xOutLen = 0;
+    xfer.xInBuf  = pBuf;
+    xfer.xInLen  = len;
+    xfer.xOpt    = 0;
 
-     int found_ch = -1;
+    // [중요] MPU6050_ADDR << 1 적용
+    return I2C_Xfer(MPU_I2C_CH, (uint8)(MPU6050_ADDR << 1), xfer, 0); 
+}
 
-    SAL_TaskSleep(500); 
-    mcu_printf("\n\r=== I2C Channel Scanner Start ===\n\r");
+// 1바이트 읽기 (진단용 Wrapper)
+static SALRetCode_t MPU6050_ReadOneByte(uint8 reg, uint8 *pData)
+{
+    return MPU6050_ReadRegs(reg, pData, 1);
+}
 
-    // 채널 0번부터 2번까지 돌면서 MPU6050(0x68)을 찾아봅니다.
-    for (int ch = 0; ch <= 2; ch++) 
+/* ========================================================================= */
+/* TASK LOOP                                                                 */
+/* ========================================================================= */
+
+static void MPU6050_Task_Loop(void *pArg)
+{
+    (void)pArg;
+    SALRetCode_t ret;
+    uint8 rawData[6]; 
+    uint8 reg_val = 0;
+
+    mcu_printf("[MPU6050] Task Loop Started...\n");
+
+    // 1. I2C 초기화 및 오픈
+    I2C_Init(); 
+    ret = I2C_Open(MPU_I2C_CH, MPU_I2C_PORT_IDX, MPU_I2C_SPEED, NULL, NULL);
+    
+    if (ret != SAL_RET_SUCCESS) {
+        mcu_printf("[MPU6050] I2C Open Failed! Error: %d\n", ret);
+        while(1) { SAL_TaskSleep(1000); }
+    } else {
+        mcu_printf("[MPU6050] I2C Open Success.\n");
+    }
+
+    // 2. 연결 확인 (WHO_AM_I)
+    // 여기서 0x68이 나와야 정상 연결입니다.
+    MPU6050_ReadOneByte(REG_WHO_AM_I, &reg_val);
+    mcu_printf("[Diag] WHO_AM_I: 0x%02X (Expected: 0x68)\n", reg_val);
+
+    // 3. 센서 깨우기 (가장 중요한 단계)
+    mcu_printf("[Setup] Waking up sensor...\n");
+    // PWR_MGMT_1(0x6B) 레지스터에 0x00을 씁니다.
+    MPU6050_WriteReg(REG_PWR_MGMT_1, 0x00);
+    SAL_TaskSleep(100); 
+
+    // 4. 깨어났는지 확인 (검증)
+    // 0x00이어야 합니다. 0x40이면 여전히 자고 있는 것입니다.
+    MPU6050_ReadOneByte(REG_PWR_MGMT_1, &reg_val);
+    mcu_printf("[Check] PWR_MGMT_1: 0x%02X (Expected: 0x00)\n", reg_val);
+    
+    if (reg_val & 0x40) {
+        mcu_printf("[Warning] Sensor still sleeping. Retrying...\n");
+        MPU6050_WriteReg(REG_PWR_MGMT_1, 0x00);
+        SAL_TaskSleep(100);
+    }
+
+    // 5. 가속도 범위 설정 (+/- 2g)
+    MPU6050_WriteReg(REG_ACCEL_CONFIG, 0x00); 
+    SAL_TaskSleep(10);
+
+    // 6. 데이터 수집 루프
+    for (;;)
     {
-        // 1. 채널 열기 (포트 0)
-        SALRetCode_t ret = I2C_Open(ch, 0, 400, NULL, NULL); 
-        
-        if (ret == 0) // 열기 성공!
+        // 버퍼 초기화
+        for(int i=0; i<6; i++) rawData[i] = 0;
+
+        ret = MPU6050_ReadRegs(REG_ACCEL_XOUT_H, rawData, 6);
+
+        if (ret == SAL_RET_SUCCESS)
         {
-            mcu_printf("Checking CH %d... ", ch);
-            
-            // 2. 0x68 주소로 '노크' 해보기 (SDK 스캔 함수)
-            uint32_t detected = I2C_ScanSlave(ch);
-            
-            if (detected == 0x68) {
-                mcu_printf("FOUND! (Sensor is here)\n\r");
-                found_ch = ch; // 찾았다!
-                break;         // 더 찾을 필요 없음
-            } else {
-                mcu_printf("Empty (Result: 0x%X)\n\r", detected);
-                I2C_Close(ch); // 아니면 닫고 다음 채널로
-            }
+            // 상위/하위 바이트 결합
+            int16 temp_raw_x = (int16)((rawData[0] << 8) | rawData[1]);
+            int16 temp_raw_y = (int16)((rawData[2] << 8) | rawData[3]);
+            int16 temp_raw_z = (int16)((rawData[4] << 8) | rawData[5]);
+
+            // 전역 변수 업데이트
+            SAL_CoreCriticalEnter();
+            g_SensorData.Raw_X = temp_raw_x;
+            g_SensorData.Raw_Y = temp_raw_y;
+            g_SensorData.Raw_Z = temp_raw_z;
+
+            g_SensorData.Ax = (double)temp_raw_x / ACCEL_SENSITIVITY;
+            g_SensorData.Ay = (double)temp_raw_y / ACCEL_SENSITIVITY;
+            g_SensorData.Az = (double)temp_raw_z / ACCEL_SENSITIVITY;
+            SAL_CoreCriticalExit();
+
+            // 실수형 출력 (정수.소수 형태로 변환)
+            int z_int = (int)g_SensorData.Az;
+            int z_dec = (int)((g_SensorData.Az - z_int) * 100);
+            if(z_dec < 0) z_dec = -z_dec;
+
+            // [결과 확인]
+            // 정상: RAW 값이 0이 아니고 변동이 있어야 함. Az는 약 1.00 근처.
+            mcu_printf("RAW: %d %d %d || Az: %d.%02d\n", 
+                       temp_raw_x, temp_raw_y, temp_raw_z, z_int, z_dec);
         }
-        else {
-            mcu_printf("CH %d Open Fail\n\r", ch);
+        else
+        {
+            mcu_printf("[Error] I2C Read Failed\n");
         }
+
+        SAL_TaskSleep(200); // 0.2초마다 갱신
     }
+}
 
-    if (found_ch == -1) {
-        mcu_printf("ERROR: Sensor NOT found. Check Wiring (SDA/SCL)!\n\r");
-        while(1) SAL_TaskSleep(1000); 
-    }
+/* ========================================================================= */
+/* EXTERNAL FUNCTIONS (API)                                                  */
+/* ========================================================================= */
 
-    mcu_printf("=== Success! Using CH %d ===\n\r", found_ch);
+// [API 1] 태스크 생성 및 시작
+void MPU6050_start_task(void)
+{
+    static uint32_t AppTaskStartID = 0;
 
-     // =========================================================
-    // [추가] I2C 채널 열기 (속도 400kHz)
-    // =========================================================
-    // 파라미터: 채널, 포트선택(0), 속도(kHz), 콜백(NULL), 인자(NULL)
-    i2c_ret = I2C_Open(I2C_CH_ACCEL, I2C_PORT_SEL, I2C_SPEED_HZ, NULL, NULL);
-    
-    if (i2c_ret != SAL_RET_SUCCESS) {
-        mcu_printf("I2C Open Failed! Error: %d\n\r", i2c_ret);
-        // 실패하면 더 이상 진행하지 않고 무한 대기 (또는 리턴)
-        while(1) SAL_TaskSleep(1000);
-    }
-    mcu_printf("I2C Open Success\n\r");
-    
-     // 1. 초기화 대기 
-    SAL_TaskSleep(100);
+    SAL_TaskCreate(
+        &AppTaskStartID,
+        "Task_MPU6050",     
+        MPU6050_Task_Loop,  
+        &g_MpuTaskStk[0],   
+        1024,               // 스택 크기
+        10,                 // 우선순위
+        NULL                
+    );
+}
 
-     // 2. WHO_AM_I 확인
-     VCPG_I2C_Read(MPU6050_ADDR, 0x75, &chip_id, 1);
+// [API 2] 최신 데이터 가져오기 (Getter)
+void MPU6050_get_data(MPU6050_Data_t *pOutData)
+{
+    if (pOutData == NULL) return;
 
-     // 3. Wake Up
-     VCPG_I2C_Write(MPU6050_ADDR, 0x6B, 0x00);
-
-     
-
-     for(;;)
-     {
-         // 데이터 읽기
-         if (VCPG_I2C_Read(MPU6050_ADDR, 0x3B, buffer, 6) == 0)
-         {
-             int16_t raw_x = (int16_t)(buffer[0] << 8 | buffer[1]);
-             int16_t raw_y = (int16_t)(buffer[2] << 8 | buffer[3]);
-             int16_t raw_z = (int16_t)(buffer[4] << 8 | buffer[5]);
- 
-             // 전역 데이터 업데이트 (Critical Section 필요 시 SAL_EnterCritical 등 사용)
-             g_mpu_data.Raw_X = raw_x;
-             g_mpu_data.Raw_Y = raw_y;
-             g_mpu_data.Raw_Z = raw_z;
-             g_mpu_data.Ax = raw_x / 16384.0;
-             g_mpu_data.Ay = raw_y / 16384.0;
-             g_mpu_data.Az = raw_z / 16384.0;
- 
-             // 디버그 출력 (필요시 주석 해제)
-             mcu_printf("Ax: %d, Ay: %d, Az: %d\n", (int32)raw_x, (int32)raw_y, (int32)raw_z);
-         }
-
-         // 100ms 지연 (10Hz)
-         SAL_TaskSleep(100); 
-
-     }
- }
- 
- // =========================================================
- // 외부 공개 함수 (시작 함수)
- // =========================================================
- void MPU6050_start_task(void)
- {
-     SALRetCode_t err;
-     SAL_TaskSleep(500);
-     err = (SALRetCode_t)SAL_TaskCreate(
-         &MpuTaskID,                  // Task ID 저장 변수
-         (const uint8 *)"MPU Task",   // Task 이름
-         (SALTaskFunc)Task_MPU6050,   // Task 함수 포인터
-         &MpuTaskStk[0],              // 스택 배열 시작 주소
-         MPU_TASK_STK_SIZE,           // 스택 사이즈
-         MPU_TASK_PRIO,               // 우선순위
-         NULL                         // 파라미터
-     );
-     
-     if (err != SAL_RET_SUCCESS) {
-         mcu_printf("MPU Task Create Failed: %d\n\r", err);
-     }
-     mcu_printf("MPU Task Create Success: %d\n\r", err);
- }
- 
- void MPU6050_get_data(MPU6050_Data_t *pOutData)
- {
-     // 필요 시 Mutex 보호 추가
-     if(pOutData != NULL) {
-         *pOutData = g_mpu_data;
-     }
- }
+    SAL_CoreCriticalEnter(); 
+    pOutData->Raw_X = g_SensorData.Raw_X;
+    pOutData->Raw_Y = g_SensorData.Raw_Y;
+    pOutData->Raw_Z = g_SensorData.Raw_Z;
+    pOutData->Ax    = g_SensorData.Ax;
+    pOutData->Ay    = g_SensorData.Ay;
+    pOutData->Az    = g_SensorData.Az;
+    SAL_CoreCriticalExit();
+}
