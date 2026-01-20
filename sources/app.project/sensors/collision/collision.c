@@ -13,6 +13,7 @@
 #include "gpio.h"
 #include "gic.h"
 #include "collision.h"
+#include "can_bridge.h"
 
 // =========================================================
 // 설정 및 전역 변수
@@ -85,10 +86,10 @@ static void Task_Collision(void *pArg)
             g_collision_flag = 0;  // 플래그 클리어
 
             mcu_printf("[COLLISION] Collision detected! (ISR count: %d)\n", g_isr_count);
-
             // 등록된 콜백 함수 실행
             if (g_collision_callback != NULL)
             {
+                mcu_printf("[COLLISION] Callback executed\n");
                 g_collision_callback();
             }
         }
@@ -119,6 +120,8 @@ void COLLISION_init(void)
     GIC_IntSrcEn(COLLISION_IRQ_ID);
 
     mcu_printf("[COLLISION] Init done (Pin: GPA6, IRQ: %d)\n", COLLISION_IRQ_ID);
+
+    COLLISION_register_callback(CAN_send_collision);
 }
 
 // =========================================================

@@ -53,13 +53,15 @@ static void Main_StartTask(void * pArg)
 
     // SONAR_init();
 
-    SONAR_start_task();
+    // SONAR_start_task();
     // MPU6050_init();
     // [추가] MPU6050 태스크 시작!
-    MPU6050_start_task();
+    // MPU6050_start_task();
 
     // COLLISION_init();
     COLLISION_start_task();
+
+    CAN_start_task();
 
     for(;;)
     {

@@ -5,22 +5,24 @@
  *      Author: mokta
  */
 
-#ifndef CAN_H
-#define CAN_H
+#ifndef CAN_APP_H
+#define CAN_APP_H
 
 #include <sal_api.h>
 #include <stdint.h>
 // dev.drivers의 CAN 헤더는 can.c에서 직접 인클루드
 
 // CAN 메시지 타입 정의
-#define CAN_type_break_led    0x20
+#define CAN_type_break_led    0x048
+
 #define CAN_type_collision     0x21
 #define CAN_type_sonar        0x24
 #define CAN_type_compass      0x24
 #define CAN_type_accel        0x2C
 
 // 전역 변수 선언
-extern uint32 g_canTxQueueHandle; // Gatekeeper용 큐 핸들
+extern uint32 g_canTxQueueHandle; // Gatekeeper용 Tx 큐 핸들
+extern uint32 g_canRxQueueHandle; // Rx 큐 핸들
 
 #pragma pack(push, 1) // 패딩 방지 (필수)
 typedef union {
@@ -51,12 +53,16 @@ typedef struct {
 
 /* 함수 원형 선언 */
 void CAN_init(void);        				// 필터 설정 및 CAN 시작 함수
-void CAN_start_task(void); 					// 태스크 시작 함수
+void CAN_start_task(void); 					// 태스크 시작 함수 (Tx + Rx 모두)
+void CAN_TX_start_task(void); 					// Tx 태스ㄴㄴㄴ크 시작 함수
+void CAN_RX_start_task(void); 					// Rx 태스크 시작 함수
 
-// 메시지 전송 함수들
-void CAN_send_collision(void);
-void CAN_send_sonar(uint16_t distance0, uint16_t distance1);
-void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered);
-void CAN_send_compass(uint16_t heading);
+// 메모리 풀 관리 함수 (can.c에서 정의)
+CAN_queue_pkt_t* CAN_AllocPool(void);
+void CAN_FreePool(CAN_queue_pkt_t *pPkt);
 
-#endif /* CAN_H */
+// 큐 메시지 개수 추적 함수 (디버깅용)
+uint32 CAN_GetTxQueueCount(void);
+void CAN_IncrementTxQueueCount(void);
+
+#endif /* CAN_APP_H */
