@@ -10,6 +10,7 @@
 #include "app_cfg.h"
 #include "sonar.h"
 #include "accel.h" // 헤더 포함
+#include "collision.h"
 
 static void Main_StartTask(void * pArg);
 
@@ -55,7 +56,10 @@ static void Main_StartTask(void * pArg)
     // SONAR_start_task();
     // MPU6050_init();
     // [추가] MPU6050 태스크 시작!
-    MPU6050_start_task();
+    // MPU6050_start_task();
+
+    // COLLISION_init();
+    COLLISION_start_task();
 
     for(;;)
     {
