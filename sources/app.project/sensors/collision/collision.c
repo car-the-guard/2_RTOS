@@ -92,7 +92,7 @@ static void Task_Collision(void *pArg)
             {
                 mcu_printf("[COLLISION] Callback executed\n");
                 g_collision_callback();
-                MATRIXLED_Test();
+                // MATRIXLED_Test();
             }
         }
 
