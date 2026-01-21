@@ -910,9 +910,9 @@ static SALRetCode_t I2C_XferSync
             }
         }
     }
-
-    ret = I2C_ProcessAckFail(ucCh, ucSlaveAddr);
-
+    else {
+        ret = I2C_ProcessAckFail(ucCh, ucSlaveAddr);
+    }
     return ret;
 }
 
