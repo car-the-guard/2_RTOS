@@ -12,8 +12,7 @@
 #include "can_config.h"
 #include "can.h"  // dev.drivers의 CAN 헤더
 #include "utils.h"
-// grid_led.h는 필요시 추가
-// #include "grid_led.h"
+#include "matrix_led.h"
 
 // can.c에서 extern으로 접근
 extern uint32 g_canTxQueueHandle;
@@ -64,8 +63,7 @@ void CAN_consume_rx_message(const void *pRxHeader, CAN_payload_t rxPayload)
    ------------------------------------------------------------------------- */
 void CAN_receive_led_signal(uint8_t type)
 {
-    // TODO: grid_led.h의 GRIDLED_SetState 함수 호출
-    // GRIDLED_SetState((GridLed_State_t) type);
+    MATRIXLED_SetState((MatrixLed_State_t)type);
     mcu_printf("[CAN_BRIDGE] LED signal received: 0x%02X\r\n", type);
 }
 

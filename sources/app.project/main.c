@@ -9,8 +9,9 @@
 #include <stdio.h>
 #include "app_cfg.h"
 #include "sonar.h"
-#include "accel.h" // 헤더 포함
+#include "accel.h"
 #include "collision.h"
+#include "matrix_led.h"
 
 static void Main_StartTask(void * pArg);
 
@@ -60,6 +61,9 @@ static void Main_StartTask(void * pArg)
 
     // COLLISION_init();
     COLLISION_start_task();
+
+    MATRIXLED_Init();
+    MATRIXLED_CreateAppTask();
 
     CAN_start_task();
 

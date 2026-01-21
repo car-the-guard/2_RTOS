@@ -201,12 +201,12 @@ void SPILED_CreateAppTask(void)
     static uint32 SpiLedDemoTaskID;
     static uint32 SpiLedDemoTaskStk[ACFG_TASK_NORMAL_STK_SIZE];
 
-    (void)SAL_TaskCreate(&SpiLedDemoTaskID,
-                         (const uint8 *)"SPILED",
-                         (SALTaskFunc)&SPILED_Task,
-                         (void * const)&SpiLedDemoTaskStk[0],
-                         ACFG_TASK_NORMAL_STK_SIZE,
-                         SAL_PRIO_SPILED_DEMO, NULL_PTR);
+    // (void)SAL_TaskCreate(&SpiLedDemoTaskID,
+    //                      (const uint8 *)"SPILED",
+    //                      (SALTaskFunc)&SPILED_Task,
+    //                      (void * const)&SpiLedDemoTaskStk[0],
+    //                      ACFG_TASK_NORMAL_STK_SIZE,
+    //                      SAL_PRIO_SPILED_DEMO, NULL_PTR);
 }
 
 #endif  // ( MCU_BSP_SUPPORT_APP_SPI_LED == 1 )

@@ -14,6 +14,7 @@
 #include "gic.h"
 #include "collision.h"
 #include "can_bridge.h"
+#include "matrix_led.h"
 
 // =========================================================
 // 설정 및 전역 변수
@@ -91,6 +92,7 @@ static void Task_Collision(void *pArg)
             {
                 mcu_printf("[COLLISION] Callback executed\n");
                 g_collision_callback();
+                MATRIXLED_Test();
             }
         }
 
