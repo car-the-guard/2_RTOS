@@ -403,7 +403,6 @@ static void CAN_TxTask_Loop(void *pArg)
             // 데이터 복사
             SAL_MemCopy(sTxMsg.mData, rxPacket->body.raw, 8);
             
-            mcu_printf("sTxMsg.mId: %d\r\n", sTxMsg.mId);
             // 3. 실제 전송
             canRet = CAN_SendMessage(CAN_CHANNEL, &sTxMsg, &ucTxBufferIndex);
             
