@@ -27,6 +27,10 @@ volatile uint32_t g_echo_end_time = 0;
 volatile uint32_t g_pulse_width = 0;
 volatile uint8_t  g_capture_done = 0;
 
+// 측정값 저장 (cm). CAN 전송은 scheduler에서 주기 수행. distance1은 예비(2채널 확장용)
+static uint16_t g_sonar_distance0 = 0;
+static uint16_t g_sonar_distance1 = 0;
+
 
 uint32_t BSP_GetMicros(void)
 {
@@ -157,10 +161,16 @@ static void Task_Sonar(void *pArg)
             // 왕복 거리이므로: 거리 = (펄스폭 * 0.0343) / 2 = 펄스폭 / 58.3 ≈ 펄스폭 / 58
             // uint32_t distance_cm = pulse_width_us / 58;
             uint32_t distance_cm = pulse_width_us / 7.2;
+            uint16_t d0 = (distance_cm > 0xFFFF) ? 0xFFFF : (uint16_t)distance_cm;
+            SAL_CoreCriticalEnter();
+            g_sonar_distance0 = d0;
+            g_sonar_distance1 = 0;  /* 예비 */
+            SAL_CoreCriticalExit();
 
             mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
-        } 
-        else {
+        }
+        else
+        {
             mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
         }
 
@@ -204,6 +214,16 @@ int32_t SONAR_get_distance(void)
         return (int32_t)(g_pulse_width / 58);
     }
     return -1;
+}
+
+void SONAR_get_data(uint16_t *pDistance0, uint16_t *pDistance1)
+{
+    if (pDistance0 == NULL || pDistance1 == NULL)
+        return;
+    SAL_CoreCriticalEnter();
+    *pDistance0 = g_sonar_distance0;
+    *pDistance1 = g_sonar_distance1;
+    SAL_CoreCriticalExit();
 }
 
 // 우선 Polling 방식으로 구현되어있음.

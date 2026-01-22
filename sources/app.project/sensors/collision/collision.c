@@ -9,11 +9,11 @@
 #include <stdint.h>
 #include <debug.h>
 #include <app_cfg.h>
+#include <sal_api.h>
 
 #include "gpio.h"
 #include "gic.h"
 #include "collision.h"
-#include "can_bridge.h"
 #include "matrix_led.h"
 
 // =========================================================
@@ -36,6 +36,9 @@ static volatile uint32 g_isr_count = 0;
 #define DEBOUNCE_TIME_MS    300     // 300ms 디바운스 시간
 static volatile uint32 g_last_isr_tick = 0;
 static volatile uint8 g_collision_flag = 0;  // 충돌 감지 플래그
+
+// 측정값 저장 (0: 정상, 0xFF: 충돌 감지). CAN 전송은 scheduler에서 주기 수행
+static uint8_t g_collision = 0;
 
 // ISR 핸들러 프로토타입
 static void COLLISION_ISR_handler(void *pArg);
@@ -85,14 +88,14 @@ static void Task_Collision(void *pArg)
         if (g_collision_flag != 0)
         {
             g_collision_flag = 0;  // 플래그 클리어
+            SAL_CoreCriticalEnter();
+            g_collision = 0xFF;    // 측정값 저장 (CAN 전송은 scheduler에서 수행)
+            SAL_CoreCriticalExit();
 
             mcu_printf("[COLLISION] Collision detected! (ISR count: %d)\n", g_isr_count);
-            // 등록된 콜백 함수 실행
             if (g_collision_callback != NULL)
             {
-                mcu_printf("[COLLISION] Callback executed\n");
                 g_collision_callback();
-                // MATRIXLED_Test();
             }
         }
 
@@ -122,8 +125,6 @@ void COLLISION_init(void)
     GIC_IntSrcEn(COLLISION_IRQ_ID);
 
     mcu_printf("[COLLISION] Init done (Pin: GPA6, IRQ: %d)\n", COLLISION_IRQ_ID);
-
-    COLLISION_register_callback(CAN_send_collision);
 }
 
 // =========================================================
@@ -161,4 +162,14 @@ void COLLISION_register_callback(CollisionCallback_t callback)
 {
     g_collision_callback = callback;
     mcu_printf("[COLLISION] Callback registered\n");
+}
+
+// g_collision 조회 (critical section 보호, scheduler용)
+void COLLISION_get_data(uint8_t *pVal)
+{
+    if (pVal == NULL)
+        return;
+    SAL_CoreCriticalEnter();
+    *pVal = g_collision;
+    SAL_CoreCriticalExit();
 }

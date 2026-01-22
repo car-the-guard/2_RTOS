@@ -20,4 +20,7 @@ void SONAR_read_sensor(void);
 // 계산된 거리값을 가져오는 함수
 int32_t SONAR_get_distance(void);
 
+// g_sonar_distance0/1 조회 (critical section 보호, scheduler용)
+void SONAR_get_data(uint16_t *pDistance0, uint16_t *pDistance1);
+
 #endif // SONAR_H

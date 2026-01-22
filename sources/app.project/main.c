@@ -12,6 +12,7 @@
 #include "accel.h"
 #include "collision.h"
 #include "matrix_led.h"
+#include "scheduler.h"
 
 static void Main_StartTask(void * pArg);
 
@@ -66,6 +67,7 @@ static void Main_StartTask(void * pArg)
     MATRIXLED_CreateAppTask();
 
     CAN_start_task();
+    SCHEDULER_start_task();
 
     for(;;)
     {

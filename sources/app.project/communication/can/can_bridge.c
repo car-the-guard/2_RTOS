@@ -102,7 +102,7 @@ void CAN_send_message(uint16_t id, CAN_queue_pkt_t *pPacket)
     }
 }
 
-void CAN_send_collision(void)
+void CAN_send_collision(uint8_t val)
 {
     mcu_printf("[CAN_BRIDGE] Sending collision message\n");
     CAN_queue_pkt_t *pPacket = CAN_AllocPool();
@@ -110,7 +110,7 @@ void CAN_send_collision(void)
     if (pPacket != NULL_PTR)
     {
         pPacket->id = CAN_type_break_led;
-        pPacket->body.field.data.u8_val = 0xFF;
+        pPacket->body.field.data.u8_val = val;
         CAN_send_message(CAN_type_break_led, pPacket);
     }
     else {

@@ -19,4 +19,7 @@ void COLLISION_start_task(void);
 // 콜백 등록 함수
 void COLLISION_register_callback(CollisionCallback_t callback);
 
+// g_collision 조회 (scheduler용)
+void COLLISION_get_data(uint8_t *pVal);
+
 #endif // COLLISION_H

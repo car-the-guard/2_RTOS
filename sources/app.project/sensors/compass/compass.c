@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <debug.h>
 #include "compass.h"
-#include "can_bridge.h"
 
 /* ========================================================================= */
 /* DEFINITIONS                                                               */
@@ -97,30 +96,11 @@ static void COMPASS_Task_Loop(void *pArg)
         // 최대 변화량 제한 적용
         float change = random_change * COMPASS_MAX_CHANGE_PER_TICK;
         
-        // 현재 오프셋에 변화량 추가
+        SAL_CoreCriticalEnter();
         g_current_offset += change;
-        
-        // 범위 제한 (-10도 ~ +10도)
         g_current_offset = clamp(g_current_offset, COMPASS_MIN_OFFSET, COMPASS_MAX_OFFSET);
-        
-        // 최종 heading 값 계산 (0도 기준 + 오프셋)
-        // 음수 방지: -10도는 350도로, 0도는 0도로, +10도는 10도로
-        uint16_t heading;
-        if (g_current_offset < 0)
-        {
-            heading = (uint16_t)(360 + g_current_offset);
-        }
-        else
-        {
-            heading = (uint16_t)g_current_offset;
-        }
-        
-        // 크리티컬 섹션으로 값 업데이트 (필요시)
-        // SAL_CoreCriticalEnter();
-        // SAL_CoreCriticalExit();
-        
-        // CAN으로 값 전송
-        CAN_send_compass(heading);
+        SAL_CoreCriticalExit();
+        /* 측정값은 g_current_offset에만 저장. CAN 전송은 scheduler에서 주기 수행 */
         
         // 디버그 출력 (선택적)
         // mcu_printf("[COMPASS] Heading: %d deg (offset: %.2f deg)\n", heading, g_current_offset);

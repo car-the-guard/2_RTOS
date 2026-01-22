@@ -15,7 +15,7 @@ void CAN_receive_led_signal(uint8_t type);
 
 // 메시지 전송 함수들
 void CAN_send_message(uint16_t id, CAN_queue_pkt_t *pPacket);
-void CAN_send_collision(void);
+void CAN_send_collision(uint8_t val);
 void CAN_send_sonar(uint16_t distance0, uint16_t distance1);
 void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered);
 void CAN_send_compass(uint16_t heading);
