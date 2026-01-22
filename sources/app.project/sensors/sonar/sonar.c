@@ -167,7 +167,7 @@ static void Task_Sonar(void *pArg)
             g_sonar_distance1 = 0;  /* 예비 */
             SAL_CoreCriticalExit();
 
-            mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
+            // mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
         }
         else
         {
@@ -185,7 +185,9 @@ void SONAR_start_task(void)
 {
     SALRetCode_t ret;
 
+    mcu_printf("[SONAR] start_task called, calling SONAR_init()...\n");
     SONAR_init();
+    mcu_printf("[SONAR] SONAR_init() returned\n");
 
     ret = (SALRetCode_t)SAL_TaskCreate(
         &g_sonar_task_id,

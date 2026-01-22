@@ -206,6 +206,9 @@ void MATRIXLED_Test(void)
 static void MATRIXLED_Task_Loop(void *pArg)
 {
     (void)pArg;
+
+    MATRIXLED_Init();
+ 
     for (;;)
         MATRIXLED_Process();
 }
@@ -258,7 +261,7 @@ void MATRIXLED_Process(void)
     }
 }
 
-void MATRIXLED_CreateAppTask(void)
+void MATRIXLED_start_task(void)
 {
     static uint32_t taskId;
     static uint32_t taskStk[ACFG_TASK_NORMAL_STK_SIZE];

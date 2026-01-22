@@ -19,13 +19,13 @@
 #include "can_bridge.h"
 #include "accel.h"
 #include "compass.h"
-#include "collision.h"
 #include "sonar.h"
+/* Note: collision.h는 collision 태스크에서 직접 CAN 전송하므로 scheduler에서 불필요 */
 
 /* =========================================================================
  * 전송 주기 (ms) - DEFINE 매크로로 변경 가능
  * ========================================================================= */
-#define SCHED_PERIOD_COLLISION_MS    1000U
+/* Note: Collision은 충돌 발생 시 즉시 전송하므로 주기 없음 */
 #define SCHED_PERIOD_SONAR_MS        2000U
 #define SCHED_PERIOD_ACCEL_MS        2000U
 #define SCHED_PERIOD_COMPASS_MS      1000U
@@ -44,7 +44,7 @@ static uint32 g_sched_task_id = 0;
 static uint32 g_sched_task_stk[SCHED_TASK_STK_SIZE];
 
 /* 각 센서별 "마지막 전송 시각" (SAL tick) */
-static uint32 g_last_sent_collision = 0;
+/* Note: Collision은 충돌 발생 시 즉시 전송하므로 scheduler에서 관리하지 않음 */
 static uint32 g_last_sent_sonar     = 0;
 static uint32 g_last_sent_accel     = 0;
 static uint32 g_last_sent_compass   = 0;
@@ -57,22 +57,15 @@ static void Task_Scheduler(void *pArg)
     (void)pArg;
     uint32 now = 0;
 
-    mcu_printf("[SCHEDULER] Task started. Periods: Collision=%u, Sonar=%u, Accel=%u, Compass=%u ms\n",
-               (unsigned)SCHED_PERIOD_COLLISION_MS, (unsigned)SCHED_PERIOD_SONAR_MS,
+    mcu_printf("[SCHEDULER] Task started. Periods: Collision=immediate, Sonar=%u, Accel=%u, Compass=%u ms\n",
+               (unsigned)SCHED_PERIOD_SONAR_MS,
                (unsigned)SCHED_PERIOD_ACCEL_MS, (unsigned)SCHED_PERIOD_COMPASS_MS);
 
     for (;;)
     {
         SAL_GetTickCount(&now);
 
-        /* Collision: 주기 도래 시 get_data → CAN_send_collision */
-        if ((now - g_last_sent_collision) >= SCHED_PERIOD_COLLISION_MS)
-        {
-            uint8_t val = 0;
-            COLLISION_get_data(&val);
-            CAN_send_collision(val);
-            g_last_sent_collision = now;
-        }
+        /* Collision: 충돌 발생 시 즉시 전송 (scheduler에서 주기 전송하지 않음) */
 
         /* Sonar: 주기 도래 시 get_data → CAN_send_sonar */
         if ((now - g_last_sent_sonar) >= SCHED_PERIOD_SONAR_MS)
@@ -86,8 +79,8 @@ static void Task_Scheduler(void *pArg)
         /* Accel: 주기 도래 시 get_data → CAN_send_accel */
         if ((now - g_last_sent_accel) >= SCHED_PERIOD_ACCEL_MS)
         {
-            MPU6050_Data_t data;
-            MPU6050_get_data(&data);
+            ACCEL_Data_t data;
+            ACCEL_get_data(&data);
             uint16_t moment  = (uint16_t)(data.Raw_X & 0xFFFF);
             uint16_t filtered = (uint16_t)(data.Raw_Y & 0xFFFF);
             CAN_send_accel(moment, filtered);

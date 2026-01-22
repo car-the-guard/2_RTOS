@@ -13,6 +13,8 @@
 #include "collision.h"
 #include "matrix_led.h"
 #include "scheduler.h"
+#include "can_app.h"
+#include "compass.h"
 
 static void Main_StartTask(void * pArg);
 
@@ -53,22 +55,23 @@ static void Main_StartTask(void * pArg)
     (void)pArg;
     (void)SAL_OsInitFuncs();
 
-    // SONAR_init();
-
-    // SONAR_start_task();
-    // MPU6050_init();
-    // [추가] MPU6050 태스크 시작!
-    // MPU6050_start_task();
-
-    // COLLISION_init();
-    COLLISION_start_task();
-
-    MATRIXLED_Init();
-    MATRIXLED_CreateAppTask();
+    mcu_printf("[Main] Main_StartTask started\n");
 
     CAN_start_task();
+
+    COLLISION_start_task();
+
+    SONAR_start_task();
+
+    ACCEL_start_task();
+
+    COMPASS_start_task();
+    
+    MATRIXLED_start_task();
+
     SCHEDULER_start_task();
 
+    mcu_printf("[Main] Entering main loop\n");
     for(;;)
     {
         SAL_TaskSleep(1000);

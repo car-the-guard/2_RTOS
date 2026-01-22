@@ -15,10 +15,10 @@
 // CAN 메시지 타입 정의
 #define CAN_type_break_led    0x048
 
-#define CAN_type_collision     0x21
-#define CAN_type_sonar        0x24
-#define CAN_type_compass      0x24
-#define CAN_type_accel        0x2C
+#define CAN_type_collision    0x008
+#define CAN_type_sonar        0x024
+#define CAN_type_accel        0x02C
+#define CAN_type_compass      0x030
 
 // 전역 변수 선언
 extern uint32 g_canTxQueueHandle; // Gatekeeper용 Tx 큐 핸들

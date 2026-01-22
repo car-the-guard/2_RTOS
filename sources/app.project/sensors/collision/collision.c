@@ -15,6 +15,7 @@
 #include "gic.h"
 #include "collision.h"
 #include "matrix_led.h"
+#include "can_bridge.h"
 
 // =========================================================
 // 설정 및 전역 변수
@@ -89,10 +90,14 @@ static void Task_Collision(void *pArg)
         {
             g_collision_flag = 0;  // 플래그 클리어
             SAL_CoreCriticalEnter();
-            g_collision = 0xFF;    // 측정값 저장 (CAN 전송은 scheduler에서 수행)
+            g_collision = 0xFF;    // 측정값 저장
             SAL_CoreCriticalExit();
 
             mcu_printf("[COLLISION] Collision detected! (ISR count: %d)\n", g_isr_count);
+            
+            // 충돌 발생 시 즉시 CAN 메시지 전송
+            CAN_send_collision(0xFF);
+            
             if (g_collision_callback != NULL)
             {
                 g_collision_callback();

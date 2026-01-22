@@ -79,9 +79,9 @@ void CAN_send_collision(uint8_t val)
     
     if (pPacket != NULL_PTR)
     {
-        pPacket->id = CAN_type_break_led;
+        pPacket->id = CAN_type_collision;
         pPacket->body.field.data.u8_val = val;
-        CAN_send_message(CAN_type_break_led, pPacket);
+        CAN_send_message(CAN_type_collision, pPacket);
     }
 }
 

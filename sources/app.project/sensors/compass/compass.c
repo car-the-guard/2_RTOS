@@ -23,9 +23,8 @@
 #define COMPASS_BASE_HEADING       0      // 기준 각도 (0도)
 #define COMPASS_MIN_OFFSET        -10     // 최소 오프셋 (-10도)
 #define COMPASS_MAX_OFFSET         10     // 최대 오프셋 (+10도)
-#define COMPASS_MAX_CHANGE_PER_SEC 0.5f   // 1초당 최대 변화량 (도)
 #define COMPASS_UPDATE_INTERVAL_MS 100    // 업데이트 주기 (100ms)
-#define COMPASS_MAX_CHANGE_PER_TICK (COMPASS_MAX_CHANGE_PER_SEC * COMPASS_UPDATE_INTERVAL_MS / 1000.0f)  // 한 틱당 최대 변화량
+// 각도 변화: 매 업데이트마다 -1도, 0도, +1도 중 하나 (1도 단위)
 
 /* ========================================================================= */
 /* LOCAL VARIABLES                                                           */
@@ -35,8 +34,8 @@
 static uint32 g_compass_task_stk[COMPASS_TASK_STK_SIZE];
 static uint32 g_compass_task_id = 0;
 
-// 현재 heading 값 (0도 기준 오프셋, -10 ~ +10도 범위)
-static float g_current_offset = 0.0f;
+// 현재 heading 값 (0도 기준 오프셋, -10 ~ +10도 범위, 1도 단위)
+static int16_t g_current_offset = 0;
 
 // 간단한 랜덤 시드 (시간 기반)
 static uint32 g_random_seed = 0;
@@ -52,21 +51,7 @@ static uint32 simple_random(void)
     return g_random_seed;
 }
 
-// -1.0 ~ 1.0 범위의 랜덤 실수 생성
-static float random_float(void)
-{
-    uint32 r = simple_random();
-    // 0 ~ 0x7FFFFFFF 범위를 -1.0 ~ 1.0으로 변환
-    return ((float)((int32)r - 0x40000000)) / 0x40000000;
-}
-
-// 값을 범위 내로 제한
-static float clamp(float value, float min_val, float max_val)
-{
-    if (value < min_val) return min_val;
-    if (value > max_val) return max_val;
-    return value;
-}
+// random_float와 clamp 함수는 더 이상 사용하지 않음 (1도 단위로 변경)
 
 /* ========================================================================= */
 /* TASK LOOP                                                                 */
@@ -84,26 +69,38 @@ static void COMPASS_Task_Loop(void *pArg)
     g_random_seed = current_tick;
     
     // 초기 heading 값 설정
-    g_current_offset = 0.0f;
+    g_current_offset = 0;
     
-    mcu_printf("[COMPASS] Initialized (Range: -10 ~ +10 degrees, Max change: 0.5 deg/sec)\n");
+    mcu_printf("[COMPASS] Initialized (Range: -10 ~ +10 degrees, Change: 1 deg per step)\n");
     
     for (;;)
     {
-        // 무작위 변화량 생성 (-1.0 ~ 1.0 범위)
-        float random_change = random_float();
+        // 무작위 변화량 생성 (-1, 0, +1 중 하나)
+        // 랜덤 값에 따라 -1도, 0도, +1도 중 하나 선택
+        int32_t random_val = (int32_t)simple_random();
+        int16_t change = 0;
         
-        // 최대 변화량 제한 적용
-        float change = random_change * COMPASS_MAX_CHANGE_PER_TICK;
+        // 랜덤 값에 따라 -1, 0, +1 중 하나 선택 (각각 33% 확률)
+        int32_t mod = random_val % 3;
+        if (mod == 0)
+            change = -1;  // -1도
+        else if (mod == 1)
+            change = 0;   // 변화 없음
+        else
+            change = 1;   // +1도
         
         SAL_CoreCriticalEnter();
         g_current_offset += change;
-        g_current_offset = clamp(g_current_offset, COMPASS_MIN_OFFSET, COMPASS_MAX_OFFSET);
+        // 범위 제한 (-10 ~ +10도)
+        if (g_current_offset < COMPASS_MIN_OFFSET)
+            g_current_offset = COMPASS_MIN_OFFSET;
+        else if (g_current_offset > COMPASS_MAX_OFFSET)
+            g_current_offset = COMPASS_MAX_OFFSET;
         SAL_CoreCriticalExit();
         /* 측정값은 g_current_offset에만 저장. CAN 전송은 scheduler에서 주기 수행 */
         
         // 디버그 출력 (선택적)
-        // mcu_printf("[COMPASS] Heading: %d deg (offset: %.2f deg)\n", heading, g_current_offset);
+        // mcu_printf("[COMPASS] Heading: %d deg\n", (int)g_current_offset);
         
         // 업데이트 주기 대기
         SAL_TaskSleep(COMPASS_UPDATE_INTERVAL_MS);
@@ -143,14 +140,14 @@ void COMPASS_get_heading(uint16_t *pHeading)
 {
     if (pHeading == NULL) return;
     
-    float offset;
+    int16_t offset;
     
     // 크리티컬 섹션으로 값 읽기
     SAL_CoreCriticalEnter();
     offset = g_current_offset;
     SAL_CoreCriticalExit();
     
-    // heading 값 계산
+    // heading 값 계산 (0도 기준 오프셋을 0~360도 범위로 변환)
     if (offset < 0)
     {
         *pHeading = (uint16_t)(360 + offset);

@@ -104,6 +104,7 @@ typedef struct DbgTag {
 * 정의되어 있고 1이면 출력, 0이거나 정의되지 않았으면 출력 안함
 ***************************************************************************************************
 */
+#define DEBUG_PRINT_ENABLE                 1
 #if defined(DEBUG_PRINT_ENABLE) && (DEBUG_PRINT_ENABLE == 1)
     #define mcu_printf                      (DBG_SerialPrintf)
 #else

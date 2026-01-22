@@ -24,7 +24,7 @@ typedef enum {
 void MATRIXLED_Init(void);
 void MATRIXLED_SetState(MatrixLed_State_t state);
 void MATRIXLED_Process(void);
-void MATRIXLED_CreateAppTask(void);
+void MATRIXLED_start_task(void);
 void MATRIXLED_Test(void);
 
 #endif /* MATRIX_LED_H_ */
