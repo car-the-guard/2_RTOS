@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include "app_cfg.h"
+#include "timestamp.h"
 #include "sonar.h"
 #include "accel.h"
 #include "collision.h"
@@ -56,6 +57,9 @@ static void Main_StartTask(void * pArg)
     (void)SAL_OsInitFuncs();
 
     mcu_printf("[Main] Main_StartTask started\n");
+
+    // 시간 동기화 타임스탬프 Task 시작 (다른 Task들보다 먼저 시작)
+    TIMESTAMP_start_task();
 
     CAN_start_task();
 
