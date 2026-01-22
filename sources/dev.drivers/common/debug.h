@@ -96,7 +96,19 @@ typedef struct DbgTag {
     uint8                               dlTag[6];
 } DbgTag_t;
 
-#define mcu_printf                          (DBG_SerialPrintf)
+/*
+***************************************************************************************************
+*                                             DEBUG PRINT CONTROL
+***************************************************************************************************
+* DEBUG_PRINT_ENABLE이 main.h에서 정의되어 있을 수 있음
+* 정의되어 있고 1이면 출력, 0이거나 정의되지 않았으면 출력 안함
+***************************************************************************************************
+*/
+#if defined(DEBUG_PRINT_ENABLE) && (DEBUG_PRINT_ENABLE == 1)
+    #define mcu_printf                      (DBG_SerialPrintf)
+#else
+    #define mcu_printf(...)                 ((void)0)
+#endif
 
 #if (DEBUG_ENABLE)
 #   define LOGE(idx, fmt, ...)                                                                            \
