@@ -23,6 +23,7 @@
 // 프로젝트의 CAN 헤더들 (타입 정의만, 함수는 아래)
 #include "can_bridge.h"
 #include "utils.h"
+#include "timestamp.h"
 
 // 프로젝트의 can_app.h 인클루드 (CAN_payload_t, CAN_queue_pkt_t 등)
 #include "can_app.h"
@@ -167,7 +168,19 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
             // (2) 페이로드 복사
             SAL_MemCopy(rxItem.payload.raw, sRxMsg.mData, 8);
             
-            // (3) Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
+            // (3) CRC 검증 (첫 7바이트에 대해 CRC 계산 후 8번째 바이트와 비교)
+            uint8_t calculated_crc = calculate_CRC8(rxItem.payload.raw, 7);
+            uint8_t received_crc = rxItem.payload.field.CRC_8;
+            
+            if (calculated_crc != received_crc)
+            {
+                // CRC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 출력 최소화)
+                mcu_printf("[CAN] CRC mismatch: calc=0x%02X, recv=0x%02X, dropped\r\n", 
+                           calculated_crc, received_crc);
+                return; // 메시지를 큐에 넣지 않고 버림
+            }
+            
+            // (4) CRC 검증 통과: Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
             SALRetCode_t queueRet = SAL_QueuePut(g_canRxQueueHandle,
                                                   &rxItem,
                                                   sizeof(CAN_rx_queue_item_t),
@@ -370,7 +383,12 @@ static void CAN_TxTask_Loop(void *pArg)
             uint8_t temp_byte; // 스왑용 임시 변수
             
             // 여기에서 TimeStamp + CRC 계산해야함
-            rxPacket->body.field.time_ms = 0;
+            // TIMESTAMP에서 하위 2바이트만 가져와서 설정
+            {
+                uint32_t timestamp_value = 0;
+                TIMESTAMP_get_ms(&timestamp_value);
+                rxPacket->body.field.time_ms = (uint16_t)(timestamp_value & 0xFFFFU);  // 하위 2바이트만 사용
+            }
             
             temp_byte = rxPacket->body.raw[4];
             rxPacket->body.raw[4] = rxPacket->body.raw[5];

@@ -176,8 +176,7 @@ static void ACCEL_Task_Loop(void *pArg)
 
             // [결과 확인]
             // 정상: RAW 값이 0이 아니고 변동이 있어야 함. Az는 약 1.00 근처.
-            // mcu_printf("RAW: %d %d %d || Az: %d.%02d\n", 
-            //            temp_raw_x, temp_raw_y, temp_raw_z, z_int, z_dec);
+            mcu_printf("RAW: %d %d %d || Az: %d.%02d\n", temp_raw_x, temp_raw_y, temp_raw_z, z_int, z_dec);
         }
         else
         {
