@@ -39,6 +39,14 @@
 #define AK8963_REG_CNTL1    0x0A   /* 0x16: 16bit, 100Hz 연속 */
 #define AK8963_REG_ST1      0x02   /* Data ready */
 #define AK8963_REG_HXL      0x03   /* HXL~HZH 6바이트 */
+#define AK8963_REG_ST2      0x09   /* ST2 읽어야 다음 측정 가능 (필수) */
+
+/* 하드 아이론 오프셋: 한 바퀴 회전 시 min/max의 중심값. 보정 시 (mx_max+mx_min)/2, (my_max+my_min)/2 */
+#define COMPASS_OFFSET_X    130
+#define COMPASS_OFFSET_Y    260
+
+/* 북(North) 보정: 센서값이 이 각도일 때 실제 나침판 0도(북). 예: 219일 때 북이면 219 */
+#define COMPASS_NORTH_OFFSET_DEG  219
 
 /* ========================================================================= */
 /* LOCAL VARIABLES                                                           */
@@ -117,7 +125,7 @@ static void COMPASS_Task_Loop(void *pArg)
     (void)pArg;
     SALRetCode_t ret;
     uint8_t reg_val = 0;
-    uint8_t raw[7];  /* ST1 + HXL~HZH 6바이트 */
+    uint8_t raw[8];  /* ST1 + HXL~HZH 6바이트 + ST2 (ST2 읽어야 다음 측정 가능) */
     int16_t mx, my, mz;
     float heading_deg;
 
@@ -170,8 +178,8 @@ static void COMPASS_Task_Loop(void *pArg)
 
     for (;;)
     {
-        /* ST1 읽어서 Data ready 확인 (ST1 bit 0) */
-        ret = AK8963_ReadRegs(AK8963_REG_ST1, raw, 7);
+        /* ST1~ST2 읽기 (ST2까지 읽어야 다음 측정 가능) */
+        ret = AK8963_ReadRegs(AK8963_REG_ST1, raw, 8);
         if (ret != SAL_RET_SUCCESS) {
             SAL_TaskSleep(COMPASS_UPDATE_INTERVAL_MS);
             continue;
@@ -188,8 +196,17 @@ static void COMPASS_Task_Loop(void *pArg)
         my = (int16_t)((raw[4] << 8) | raw[3]);
         mz = (int16_t)((raw[6] << 8) | raw[5]);
 
-        /* heading = atan2(my, mx) * 180/pi, 0~360 */
-        heading_deg = (float)atan2((double)my, (double)mx) * (180.0f / 3.14159265f);
+        /* 하드 아이론 보정 (오프셋 제거) */
+        float mx_cal = (float)mx - (float)COMPASS_OFFSET_X;
+        float my_cal = (float)my - (float)COMPASS_OFFSET_Y;
+
+        /* heading: atan2(-my_cal, mx_cal) * 180/pi, 0~360 */
+        heading_deg = (float)atan2((double)(-my_cal), (double)mx_cal) * (180.0f / 3.14159265f);
+        if (heading_deg < 0.0f)
+            heading_deg += 360.0f;
+
+        /* 북(North) 보정: 센서 219도 = 실제 북(0도) */
+        heading_deg -= (float)COMPASS_NORTH_OFFSET_DEG;
         if (heading_deg < 0.0f)
             heading_deg += 360.0f;
 
@@ -197,8 +214,12 @@ static void COMPASS_Task_Loop(void *pArg)
         if (g_heading >= 360U)
             g_heading = 0U;
 
-        /* 디버그 (선택적) */
-        /* mcu_printf("[COMPASS] mx=%d my=%d mz=%d heading=%u\n", mx, my, mz, (unsigned)g_heading); */
+        /* 디버그 */
+        {
+            int heading_val = (int)g_heading;
+            mcu_printf("[COMPASS] mx=%d my=%d mz=%d heading=%d deg\n",
+                       (int)mx, (int)my, (int)mz, heading_val);
+        }
 
         SAL_TaskSleep(COMPASS_UPDATE_INTERVAL_MS);
     }
