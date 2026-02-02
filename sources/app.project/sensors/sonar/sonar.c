@@ -9,6 +9,7 @@
 #include "sonar.h"
 #include "utils.h"
 #include "kalman_filter.h"
+#include "relative_velocity.h"
 
 #define SONAR_IRQ_ID        GIC_EXT1  
 
@@ -109,8 +110,9 @@ static void Task_Sonar(void *pArg)
 
     mcu_printf("SONAR Polling Mode Start\n");
 
-    // 칼만 필터 초기화
+    // 칼만 필터, 상대 속도 추정기 초기화
     KalmanFilter1D_Init(&g_sonar_kalman, SONAR_KF_INIT_VAL, SONAR_KF_P0, SONAR_KF_Q, SONAR_KF_R);
+    RelativeVel_Init();
 
     // 1. 핀 설정 (입력 버퍼 필수!)
     GPIO_Config(SONAR_TRIG_PIN, GPIO_OUTPUT | GPIO_FUNC(0) | GPIO_NOPULL);
@@ -174,6 +176,11 @@ static void Task_Sonar(void *pArg)
             /* 칼만 필터 적용 (sonar.c는 적용만, 필터 구현은 utils/kalman_filter) */
             float filtered = KalmanFilter1D_Update(&g_sonar_kalman, raw_cm);
             uint16_t d0 = (filtered < 0.0f) ? 0 : (filtered > 65535.0f) ? 0xFFFF : (uint16_t)(filtered + 0.5f);
+
+            /* 상대 속도 추정 (utils/relative_velocity) */
+            uint32_t tick_ms = 0;
+            SAL_GetTickCount(&tick_ms);
+            RelativeVel_Update(filtered, tick_ms);
 
             SAL_CoreCriticalEnter();
             g_sonar_distance0 = d0;

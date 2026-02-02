@@ -401,8 +401,8 @@ static void CAN_TxTask_Loop(void *pArg)
                 rxPacket->body.raw[0] = rxPacket->body.raw[1];
                 rxPacket->body.raw[1] = temp_byte;
             }
-            // Case 2: ID 0x2C -> [0]<->[1] 교환 AND [2]<->[3] 교환
-            else if (sTxMsg.mId == CAN_type_accel)
+            // Case 2: dual_u16 형식 (accel, rel_distance) -> [0]<->[1] 교환 AND [2]<->[3] 교환
+            else if (sTxMsg.mId == CAN_type_accel || sTxMsg.mId == CAN_type_rel_distance)
             {
                 // 0, 1 교환
                 temp_byte = rxPacket->body.raw[0];

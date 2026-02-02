@@ -98,6 +98,19 @@ void CAN_send_sonar(uint16_t distance0, uint16_t distance1)
     }
 }
 
+void CAN_send_rel_distance(uint16_t distance_cm, int16_t velocity_cm_per_s)
+{
+    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
+    
+    if (pPacket != NULL_PTR)
+    {
+        pPacket->id = CAN_type_rel_distance;
+        pPacket->body.field.data.dual_u16.val_A = (int16_t)(distance_cm > 32767U ? 32767 : distance_cm);
+        pPacket->body.field.data.dual_u16.val_B = velocity_cm_per_s;
+        CAN_send_message(CAN_type_rel_distance, pPacket);
+    }
+}
+
 void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered)
 {
     CAN_queue_pkt_t *pPacket = CAN_AllocPool();

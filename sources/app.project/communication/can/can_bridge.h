@@ -26,6 +26,7 @@ void CAN_receive_led_signal(uint8_t type);
 void CAN_send_message(uint16_t id, CAN_queue_pkt_t *pPacket);
 void CAN_send_collision(uint8_t val);
 void CAN_send_sonar(uint16_t distance0, uint16_t distance1);
+void CAN_send_rel_distance(uint16_t distance_cm, int16_t velocity_cm_per_s);
 void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered);
 void CAN_send_compass(uint16_t heading);
 
