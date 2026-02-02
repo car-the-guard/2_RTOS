@@ -5,6 +5,14 @@
 #include "can_app.h"
 // dev.drivers의 CANMessage_t는 can_bridge.c에서 직접 인클루드
 
+// CAN 메시지 타입 정의
+#define CAN_type_break_led    0x048
+
+#define CAN_type_collision    0x008
+#define CAN_type_sonar        0x024
+#define CAN_type_rel_distance 0x02C
+#define CAN_type_compass      0x084
+
 // CAN 메시지 소비 함수 선언
 // RxHeader는 CAN 드라이버의 CANMessage_t 구조체를 사용
 // 실제 구현은 can_bridge.c에서 (필요시 별도 파일로 분리 가능)

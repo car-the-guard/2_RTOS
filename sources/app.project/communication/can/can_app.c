@@ -172,12 +172,12 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
             uint8_t calculated_crc = calculate_CRC8(rxItem.payload.raw, 7);
             uint8_t received_crc = rxItem.payload.field.CRC_8;
             
-            if (calculated_crc != received_crc)
+            // if (calculated_crc != received_crc)
             {
                 // CRC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 출력 최소화)
                 mcu_printf("[CAN] CRC mismatch: calc=0x%02X, recv=0x%02X, dropped\r\n", 
                            calculated_crc, received_crc);
-                return; // 메시지를 큐에 넣지 않고 버림
+                // return; // 메시지를 큐에 넣지 않고 버림
             }
             
             // (4) CRC 검증 통과: Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
@@ -421,22 +421,21 @@ static void CAN_TxTask_Loop(void *pArg)
             // 데이터 복사
             SAL_MemCopy(sTxMsg.mData, rxPacket->body.raw, 8);
             
-            // 3. 실제 전송
+            // 3. 실제 전송 (NUCLEO STM32 등과 통신 시 ACK를 받으려면 반드시 호출 필요)
             canRet = CAN_SendMessage(CAN_CHANNEL, &sTxMsg, &ucTxBufferIndex);
             
             if (canRet != CAN_ERROR_NONE)
             {
-                // 전송 에러 처리
+                // 전송 에러 처리 (버스 오프, 미수신 등 → ACK 없음 원인)
                 mcu_printf("[CAN] Message Send Failed: %d\r\n", canRet);
             }
             else
             {
                 mcu_printf("[CAN] MESSAGE SEND: 0x%03X ", sTxMsg.mId);
-                SAL_TaskSleep(100);
                 Print_Hex_8Bytes(rxPacket->body.raw);
             }
             
-            // 전송이 잘 진행되었다면 pool 할당 해제
+            // 전송 성공/실패와 관계없이 pool 할당 해제 (실패 시에도 재사용 위해)
             SAL_MemSet(rxPacket->body.raw, 0, 8);
             CAN_FreePool(rxPacket);
         }

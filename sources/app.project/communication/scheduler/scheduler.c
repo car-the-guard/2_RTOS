@@ -26,8 +26,8 @@
  * 전송 주기 (ms) - DEFINE 매크로로 변경 가능
  * ========================================================================= */
 /* Note: Collision은 충돌 발생 시 즉시 전송하므로 주기 없음 */
-#define SCHED_PERIOD_SONAR_MS        2000U
-#define SCHED_PERIOD_ACCEL_MS        2000U
+#define SCHED_PERIOD_SONAR_MS        200U
+#define SCHED_PERIOD_ACCEL_MS        200U
 #define SCHED_PERIOD_COMPASS_MS      1000U
 
 /* =========================================================================
