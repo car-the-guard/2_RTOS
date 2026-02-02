@@ -27,8 +27,8 @@
  * 전송 주기 (ms) - DEFINE 매크로로 변경 가능
  * ========================================================================= */
 /* Note: Collision은 충돌 발생 시 즉시 전송하므로 주기 없음 */
-#define SCHED_PERIOD_SONAR_MS          200U
-#define SCHED_PERIOD_REL_DISTANCE_MS   200U
+#define SCHED_PERIOD_SONAR_MS          200U   /* 0x24 거리 */
+#define SCHED_PERIOD_REL_VELOCITY_MS   200U   /* 0x2C 상대속도 */
 #define SCHED_PERIOD_ACCEL_MS          200U
 #define SCHED_PERIOD_COMPASS_MS        1000U
 
@@ -48,7 +48,7 @@ static uint32 g_sched_task_stk[SCHED_TASK_STK_SIZE];
 /* 각 센서별 "마지막 전송 시각" (SAL tick) */
 /* Note: Collision은 충돌 발생 시 즉시 전송하므로 scheduler에서 관리하지 않음 */
 static uint32 g_last_sent_sonar         = 0;
-static uint32 g_last_sent_rel_distance  = 0;
+static uint32 g_last_sent_rel_velocity  = 0;
 static uint32 g_last_sent_accel         = 0;
 static uint32 g_last_sent_compass       = 0;
 
@@ -60,9 +60,9 @@ static void Task_Scheduler(void *pArg)
     (void)pArg;
     uint32 now = 0;
 
-    mcu_printf("[SCHEDULER] Task started. Periods: Collision=immediate, Sonar=%u, RelDist=%u, Accel=%u, Compass=%u ms\n",
+    mcu_printf("[SCHEDULER] Task started. Periods: Collision=immediate, Sonar(0x24)=%u, RelVel(0x2C)=%u, Accel=%u, Compass=%u ms\n",
                (unsigned)SCHED_PERIOD_SONAR_MS,
-               (unsigned)SCHED_PERIOD_REL_DISTANCE_MS,
+               (unsigned)SCHED_PERIOD_REL_VELOCITY_MS,
                (unsigned)SCHED_PERIOD_ACCEL_MS, (unsigned)SCHED_PERIOD_COMPASS_MS);
 
     for (;;)
@@ -80,15 +80,15 @@ static void Task_Scheduler(void *pArg)
             g_last_sent_sonar = now;
         }
 
-        /* RelDistance: 전방 거리 + 상대 속도 → CAN_send_rel_distance */
-        if ((now - g_last_sent_rel_distance) >= SCHED_PERIOD_REL_DISTANCE_MS)
+        /* RelVelocity (0x2C): 상대 속도 [cm/s] uint32만 전송 */
+        if ((now - g_last_sent_rel_velocity) >= SCHED_PERIOD_REL_VELOCITY_MS)
         {
-            uint16_t d0 = 0, d1 = 0;
-            SONAR_get_data(&d0, &d1);
-            float vel = RelativeVel_Get();
-            int16_t vel_s16 = (vel < -32768.0f) ? -32768 : (vel > 32767.0f) ? 32767 : (int16_t)vel;
-            CAN_send_rel_distance(d0, vel_s16);
-            g_last_sent_rel_distance = now;
+            float vel_f = RelativeVel_Get();
+            int32_t vel_i = (vel_f < -2147483648.0f) ? (int32_t)0x80000000
+                : (vel_f > 2147483647.0f) ? 2147483647 : (int32_t)vel_f;
+            uint32_t vel_u = (uint32_t)vel_i;
+            CAN_send_rel_velocity(vel_u);
+            g_last_sent_rel_velocity = now;
         }
 
         /* Accel: 주기 도래 시 get_data → CAN_send_accel */

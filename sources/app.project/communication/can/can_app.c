@@ -394,25 +394,33 @@ static void CAN_TxTask_Loop(void *pArg)
             rxPacket->body.raw[4] = rxPacket->body.raw[5];
             rxPacket->body.raw[5] = temp_byte;
             
-            // Case 1: ID 0x24 -> [0]과 [1] 교환
-            if (sTxMsg.mId == CAN_type_sonar || sTxMsg.mId == CAN_type_compass)
+            /* Little Endian → Big Endian 변환 (CAN 패킷) */
+            // Case 1: u16 단일 (compass) -> [0]<->[1]
+            if (sTxMsg.mId == CAN_type_compass)
             {
                 temp_byte = rxPacket->body.raw[0];
                 rxPacket->body.raw[0] = rxPacket->body.raw[1];
                 rxPacket->body.raw[1] = temp_byte;
             }
-            // Case 2: dual_u16 형식 (accel, rel_distance) -> [0]<->[1] 교환 AND [2]<->[3] 교환
-            else if (sTxMsg.mId == CAN_type_accel || sTxMsg.mId == CAN_type_rel_distance)
+            // Case 2: dual_u16 (sonar, accel) -> [0]<->[1] AND [2]<->[3]
+            else if (sTxMsg.mId == CAN_type_sonar || sTxMsg.mId == CAN_type_accel)
             {
-                // 0, 1 교환
                 temp_byte = rxPacket->body.raw[0];
                 rxPacket->body.raw[0] = rxPacket->body.raw[1];
                 rxPacket->body.raw[1] = temp_byte;
-                
-                // 2, 3 교환
                 temp_byte = rxPacket->body.raw[2];
                 rxPacket->body.raw[2] = rxPacket->body.raw[3];
                 rxPacket->body.raw[3] = temp_byte;
+            }
+            // Case 3: uint32 (rel_velocity) -> [0]<->[3], [1]<->[2] (전체 4바이트 역순)
+            else if (sTxMsg.mId == CAN_type_rel_velocity)
+            {
+                temp_byte = rxPacket->body.raw[0];
+                rxPacket->body.raw[0] = rxPacket->body.raw[3];
+                rxPacket->body.raw[3] = temp_byte;
+                temp_byte = rxPacket->body.raw[1];
+                rxPacket->body.raw[1] = rxPacket->body.raw[2];
+                rxPacket->body.raw[2] = temp_byte;
             }
             
             // CRC 계산
