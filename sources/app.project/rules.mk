@@ -25,7 +25,6 @@ VPATH += $(APP_PROJECT_ALL_DIRS)
 
 # make가 sonar.c 파일을 찾을 수 있도록 검색 경로(VPATH)에 추가
 VPATH += $(MCU_BSP_APP_PROJECT_PATH)/sensors/sonar
-VPATH += $(MCU_BSP_APP_PROJECT_PATH)/sensors/accel
 
 # --------------------------------------------------------------------------
 # 소스 파일 및 기타 설정

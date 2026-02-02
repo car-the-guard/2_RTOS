@@ -117,19 +117,6 @@ void CAN_send_rel_velocity(uint32_t velocity_cm_per_s)
     }
 }
 
-void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered)
-{
-    CAN_queue_pkt_t *pPacket = CAN_AllocPool();
-    
-    if (pPacket != NULL_PTR)
-    {
-        pPacket->id = CAN_type_accel;
-        pPacket->body.field.data.dual_u16.val_A = accel_moment;
-        pPacket->body.field.data.dual_u16.val_B = accel_filtered;
-        CAN_send_message(CAN_type_accel, pPacket);
-    }
-}
-
 void CAN_send_compass(uint16_t heading)
 {
     CAN_queue_pkt_t *pPacket = CAN_AllocPool();

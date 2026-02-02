@@ -17,7 +17,6 @@
 #include <debug.h>
 #include "scheduler.h"
 #include "can_bridge.h"
-#include "accel.h"
 #include "compass.h"
 #include "sonar.h"
 #include "relative_velocity.h"
@@ -29,7 +28,6 @@
 /* Note: Collision은 충돌 발생 시 즉시 전송하므로 주기 없음 */
 #define SCHED_PERIOD_SONAR_MS          200U   /* 0x24 거리 */
 #define SCHED_PERIOD_REL_VELOCITY_MS   200U   /* 0x2C 상대속도 */
-#define SCHED_PERIOD_ACCEL_MS          200U
 #define SCHED_PERIOD_COMPASS_MS        1000U
 
 /* =========================================================================
@@ -49,7 +47,6 @@ static uint32 g_sched_task_stk[SCHED_TASK_STK_SIZE];
 /* Note: Collision은 충돌 발생 시 즉시 전송하므로 scheduler에서 관리하지 않음 */
 static uint32 g_last_sent_sonar         = 0;
 static uint32 g_last_sent_rel_velocity  = 0;
-static uint32 g_last_sent_accel         = 0;
 static uint32 g_last_sent_compass       = 0;
 
 /* =========================================================================
@@ -60,10 +57,10 @@ static void Task_Scheduler(void *pArg)
     (void)pArg;
     uint32 now = 0;
 
-    mcu_printf("[SCHEDULER] Task started. Periods: Collision=immediate, Sonar(0x24)=%u, RelVel(0x2C)=%u, Accel=%u, Compass=%u ms\n",
+    mcu_printf("[SCHEDULER] Task started. Periods: Collision=immediate, Sonar(0x24)=%u, RelVel(0x2C)=%u, Compass=%u ms\n",
                (unsigned)SCHED_PERIOD_SONAR_MS,
                (unsigned)SCHED_PERIOD_REL_VELOCITY_MS,
-               (unsigned)SCHED_PERIOD_ACCEL_MS, (unsigned)SCHED_PERIOD_COMPASS_MS);
+               (unsigned)SCHED_PERIOD_COMPASS_MS);
 
     for (;;)
     {
@@ -89,17 +86,6 @@ static void Task_Scheduler(void *pArg)
             uint32_t vel_u = (uint32_t)vel_i;
             CAN_send_rel_velocity(vel_u);
             g_last_sent_rel_velocity = now;
-        }
-
-        /* Accel: 주기 도래 시 get_data → CAN_send_accel */
-        if ((now - g_last_sent_accel) >= SCHED_PERIOD_ACCEL_MS)
-        {
-            ACCEL_Data_t data;
-            ACCEL_get_data(&data);
-            uint16_t moment  = (uint16_t)(data.Raw_X & 0xFFFF);
-            uint16_t filtered = (uint16_t)(data.Raw_Y & 0xFFFF);
-            CAN_send_accel(moment, filtered);
-            g_last_sent_accel = now;
         }
 
         /* Compass: 주기 도래 시 get_data → CAN_send_compass */

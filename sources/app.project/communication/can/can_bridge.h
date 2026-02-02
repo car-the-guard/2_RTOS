@@ -11,7 +11,6 @@
 #define CAN_type_collision    0x008
 #define CAN_type_sonar        0x024   /* 초음파 거리 [cm] uint16 x2 */
 #define CAN_type_rel_velocity 0x02C   /* 상대 속도 [cm/s] uint32 */
-#define CAN_type_accel        0x030
 #define CAN_type_compass      0x084
 
 // CAN 메시지 소비 함수 선언
@@ -27,7 +26,6 @@ void CAN_send_message(uint16_t id, CAN_queue_pkt_t *pPacket);
 void CAN_send_collision(uint8_t val);
 void CAN_send_sonar(uint16_t distance0, uint16_t distance1);
 void CAN_send_rel_velocity(uint32_t velocity_cm_per_s);
-void CAN_send_accel(uint16_t accel_moment, uint16_t accel_filtered);
 void CAN_send_compass(uint16_t heading);
 
 #endif // CAN_BRIDGE_H

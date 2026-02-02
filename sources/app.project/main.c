@@ -10,7 +10,6 @@
 #include "app_cfg.h"
 #include "timestamp.h"
 #include "sonar.h"
-#include "accel.h"
 #include "collision.h"
 #include "matrix_led.h"
 #include "scheduler.h"
@@ -66,8 +65,6 @@ static void Main_StartTask(void * pArg)
     COLLISION_start_task();
 
     SONAR_start_task();
-
-    ACCEL_start_task();
 
     COMPASS_start_task();
     

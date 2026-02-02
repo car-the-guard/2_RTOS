@@ -402,8 +402,8 @@ static void CAN_TxTask_Loop(void *pArg)
                 rxPacket->body.raw[0] = rxPacket->body.raw[1];
                 rxPacket->body.raw[1] = temp_byte;
             }
-            // Case 2: dual_u16 (sonar, accel) -> [0]<->[1] AND [2]<->[3]
-            else if (sTxMsg.mId == CAN_type_sonar || sTxMsg.mId == CAN_type_accel)
+            // Case 2: dual_u16 (sonar) -> [0]<->[1] AND [2]<->[3]
+            else if (sTxMsg.mId == CAN_type_sonar)
             {
                 temp_byte = rxPacket->body.raw[0];
                 rxPacket->body.raw[0] = rxPacket->body.raw[1];
