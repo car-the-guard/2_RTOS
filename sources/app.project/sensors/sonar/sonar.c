@@ -5,9 +5,10 @@
 #include <app_cfg.h>
 
 #include "gpio.h"
-#include "gic.h"     
+#include "gic.h"
 #include "sonar.h"
 #include "utils.h"
+#include "kalman_filter.h"
 
 #define SONAR_IRQ_ID        GIC_EXT1  
 
@@ -30,6 +31,13 @@ volatile uint8_t  g_capture_done = 0;
 // 측정값 저장 (cm). CAN 전송은 scheduler에서 주기 수행. distance1은 예비(2채널 확장용)
 static uint16_t g_sonar_distance0 = 0;
 static uint16_t g_sonar_distance1 = 0;
+
+// 칼만 필터 (Q, R은 HC-SR04 특성에 맞게 튜닝 가능)
+#define SONAR_KF_INIT_VAL    0.0f
+#define SONAR_KF_P0          1000.0f  /* 초기 불확실성 (첫 측정을 빠르게 반영) */
+#define SONAR_KF_Q           0.05f    /* 프로세스 노이즈 (거리 변화 속도) */
+#define SONAR_KF_R           20.0f    /* 측정 노이즈 (센서 노이즈 수준) */
+static KalmanFilter1D_t g_sonar_kalman;
 
 
 uint32_t BSP_GetMicros(void)
@@ -101,6 +109,9 @@ static void Task_Sonar(void *pArg)
 
     mcu_printf("SONAR Polling Mode Start\n");
 
+    // 칼만 필터 초기화
+    KalmanFilter1D_Init(&g_sonar_kalman, SONAR_KF_INIT_VAL, SONAR_KF_P0, SONAR_KF_Q, SONAR_KF_R);
+
     // 1. 핀 설정 (입력 버퍼 필수!)
     GPIO_Config(SONAR_TRIG_PIN, GPIO_OUTPUT | GPIO_FUNC(0) | GPIO_NOPULL);
     GPIO_Config(SONAR_ECHO_PIN, GPIO_INPUT  | GPIO_FUNC(0) | GPIO_INPUTBUF_EN | GPIO_PULLUP);
@@ -156,12 +167,14 @@ static void Task_Sonar(void *pArg)
             // 200MHz에서 1us = 200 사이클, 루프 한 번 ≈ 50 사이클
             uint32_t pulse_width_us = pulse_len / LOOPS_PER_US;
             
-            // HC-SR04 거리 계산: 거리(cm) = 펄스폭(us) / 58
-            // 음속 343m/s = 34300cm/s = 0.0343cm/us
-            // 왕복 거리이므로: 거리 = (펄스폭 * 0.0343) / 2 = 펄스폭 / 58.3 ≈ 펄스폭 / 58
-            // uint32_t distance_cm = pulse_width_us / 58;
-            uint32_t distance_cm = pulse_width_us / 7.2;
-            uint16_t d0 = (distance_cm > 0xFFFF) ? 0xFFFF : (uint16_t)distance_cm;
+            // HC-SR04 거리 계산: 거리(cm) = 펄스폭(us) / 7.2 (보정된 계수)
+            float raw_cm = (float)pulse_width_us / 7.2f;
+            if (raw_cm > 65535.0f) raw_cm = 65535.0f;
+
+            /* 칼만 필터 적용 (sonar.c는 적용만, 필터 구현은 utils/kalman_filter) */
+            float filtered = KalmanFilter1D_Update(&g_sonar_kalman, raw_cm);
+            uint16_t d0 = (filtered < 0.0f) ? 0 : (filtered > 65535.0f) ? 0xFFFF : (uint16_t)(filtered + 0.5f);
+
             SAL_CoreCriticalEnter();
             g_sonar_distance0 = d0;
             g_sonar_distance1 = 0;  /* 예비 */

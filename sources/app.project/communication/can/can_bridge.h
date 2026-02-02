@@ -10,6 +10,7 @@
 
 #define CAN_type_collision    0x008
 #define CAN_type_sonar        0x024
+#define CAN_type_accel        0x030
 #define CAN_type_rel_distance 0x02C
 #define CAN_type_compass      0x084
 
