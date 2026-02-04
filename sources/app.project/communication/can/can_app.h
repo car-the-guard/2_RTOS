@@ -30,8 +30,8 @@ typedef union {
         } data;
 
         uint16_t time_ms;   // 2 bytes (공통)
-        uint8_t  reserved;  // 1 byte  (공통)
-        uint8_t  CRC_8;     // 1 byte  (공통)
+        uint8_t  counter;   // 1 byte  Rolling Counter (공통)
+        uint8_t  MAC;       // 1 byte  Message Authentication Code (공통)
     } field;
 
     uint8_t raw[8];

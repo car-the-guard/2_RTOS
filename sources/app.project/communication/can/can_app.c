@@ -27,6 +27,7 @@
 
 // 프로젝트의 can_app.h 인클루드 (CAN_payload_t, CAN_queue_pkt_t 등)
 #include "can_app.h"
+#include "can_security_utils.h"
 
 /* -------------------------------------------------------------------------
    전역 변수 및 핸들 정의
@@ -70,6 +71,27 @@ static uint32 g_can_tx_task_stk[CAN_TASK_STK_SIZE];
 
 static uint32 g_can_rx_task_id = 0;
 static uint32 g_can_rx_task_stk[CAN_TASK_STK_SIZE];
+
+/* -------------------------------------------------------------------------
+   ID별 Rolling Counter (1 byte, 송신/수신 각각 유지)
+   ------------------------------------------------------------------------- */
+#define CAN_SECURE_COUNTER_MAX_IDS  16
+
+typedef struct {
+    uint16_t id;
+    uint8_t  tx_counter;       /* 송신 성공 시 증가 */
+    uint8_t  rx_expected;      /* 수신 검증 성공 시 다음에 기대할 counter */
+    uint8_t  rx_initialized;   /* 1: 첫 수신으로 기대값 초기화됨, 0: 아직 미수신 */
+} can_id_counter_t;
+
+static can_id_counter_t g_can_id_counters[CAN_SECURE_COUNTER_MAX_IDS];
+static uint8_t g_can_id_counter_count = 0;
+
+static uint8_t CAN_GetTxCounter(uint16_t id);
+static void    CAN_IncTxCounter(uint16_t id);
+static int     CAN_GetRxExpected(uint16_t id, uint8_t *out_expected);
+static uint8_t CAN_IsRxInitialized(uint16_t id);
+static void    CAN_AcceptRxUpdate(uint16_t id, uint8_t recv_counter);
 
 /* -------------------------------------------------------------------------
    내부 함수 선언
@@ -143,6 +165,72 @@ void CAN_FreePool(CAN_queue_pkt_t *pPkt)
 }
 
 /* -------------------------------------------------------------------------
+   ID별 Counter 헬퍼 (Rolling Counter)
+   ------------------------------------------------------------------------- */
+static int CAN_FindOrAddId(uint16_t id)
+{
+    int i;
+    for (i = 0; i < (int)g_can_id_counter_count; i++)
+    {
+        if (g_can_id_counters[i].id == id)
+            return i;
+    }
+    if (g_can_id_counter_count >= CAN_SECURE_COUNTER_MAX_IDS)
+        return -1;
+    i = (int)g_can_id_counter_count;
+    g_can_id_counters[i].id = id;
+    g_can_id_counters[i].tx_counter = 0;
+    g_can_id_counters[i].rx_expected = 0;
+    g_can_id_counters[i].rx_initialized = 0;
+    g_can_id_counter_count++;
+    return i;
+}
+
+static uint8_t CAN_GetTxCounter(uint16_t id)
+{
+    int idx = CAN_FindOrAddId(id);
+    if (idx < 0)
+        return 0;
+    return g_can_id_counters[idx].tx_counter;
+}
+
+static void CAN_IncTxCounter(uint16_t id)
+{
+    int idx = CAN_FindOrAddId(id);
+    if (idx >= 0)
+        g_can_id_counters[idx].tx_counter++;
+}
+
+/* out_expected: 다음에 기대하는 counter 값. 수신한 counter가 이 값과 같으면 수락 */
+static int CAN_GetRxExpected(uint16_t id, uint8_t *out_expected)
+{
+    int idx = CAN_FindOrAddId(id);
+    if (idx < 0 || out_expected == NULL_PTR)
+        return -1;
+    *out_expected = g_can_id_counters[idx].rx_expected;
+    return 0;
+}
+
+static uint8_t CAN_IsRxInitialized(uint16_t id)
+{
+    int idx = CAN_FindOrAddId(id);
+    if (idx < 0)
+        return 0;
+    return g_can_id_counters[idx].rx_initialized;
+}
+
+/* 수신 수락 시 호출: 다음 기대 counter = (recv_counter + 1) % 256, 초기화 플래그 설정 */
+static void CAN_AcceptRxUpdate(uint16_t id, uint8_t recv_counter)
+{
+    int idx = CAN_FindOrAddId(id);
+    if (idx >= 0)
+    {
+        g_can_id_counters[idx].rx_expected = (uint8_t)((recv_counter + 1u) & 0xFFu);
+        g_can_id_counters[idx].rx_initialized = 1;
+    }
+}
+
+/* -------------------------------------------------------------------------
    CAN 콜백 함수
    ------------------------------------------------------------------------- */
 static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t uiRxBufferType, CANErrorType_t uiError)
@@ -168,19 +256,34 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
             // (2) 페이로드 복사
             SAL_MemCopy(rxItem.payload.raw, sRxMsg.mData, 8);
             
-            // (3) CRC 검증 (첫 7바이트에 대해 CRC 계산 후 8번째 바이트와 비교)
-            uint8_t calculated_crc = calculate_CRC8(rxItem.payload.raw, 7);
-            uint8_t received_crc = rxItem.payload.field.CRC_8;
-            
-            // if (calculated_crc != received_crc)
+            // (3) MAC 검증 (data 7바이트 + counter 기준으로 MAC 계산 후 8번째 바이트와 비교)
+            uint8_t recv_counter = rxItem.payload.field.counter;
+            uint8_t recv_mac     = rxItem.payload.field.MAC;
+            if (verify_mac(rxItem.payload.raw, 7, recv_counter, recv_mac) == 0)
             {
-                // CRC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 출력 최소화)
-                mcu_printf("[CAN] CRC mismatch: calc=0x%02X, recv=0x%02X, dropped\r\n", 
-                           calculated_crc, received_crc);
-                // return; // 메시지를 큐에 넣지 않고 버림
+                // MAC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 최소화)
+                mcu_printf("[CAN] MAC verify fail, dropped\r\n");
+                return;
             }
             
-            // (4) CRC 검증 통과: Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
+            // (4) Rolling Counter: 첫 수신은 해당 counter로 기대값 초기화, 이후는 기대값 일치 시에만 수락
+            uint16_t rx_id = (uint16_t)sRxMsg.mId;
+            if (CAN_IsRxInitialized(rx_id))
+            {
+                uint8_t expected = 0;
+                if (CAN_GetRxExpected(rx_id, &expected) != 0 || recv_counter != expected)
+                {
+                    mcu_printf("[CAN] Counter mismatch id=0x%03X recv=%u expected=%u, dropped\r\n",
+                               (unsigned int)sRxMsg.mId, (unsigned int)recv_counter, (unsigned int)expected);
+                    return;
+                }
+            }
+            /* 첫 수신: 기대값 검사 없이 수락 후, 수신한 counter로 다음 기대값 초기화 */
+            
+            // (5) MAC·Counter 검증 통과: 다음 기대 counter 갱신 후 Rx Queue에 넣기
+            CAN_AcceptRxUpdate(rx_id, recv_counter);
+            
+            // (6) Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
             SALRetCode_t queueRet = SAL_QueuePut(g_canRxQueueHandle,
                                                   &rxItem,
                                                   sizeof(CAN_rx_queue_item_t),
@@ -228,6 +331,10 @@ void CAN_init(void)
     // 1. 메모리 풀 초기화
     SAL_MemSet(g_canTxPool, 0, sizeof(g_canTxPool));
     SAL_MemSet(g_canTxPoolUsed, 0, sizeof(g_canTxPoolUsed));
+    
+    // ID별 Rolling Counter 테이블 초기화
+    SAL_MemSet(g_can_id_counters, 0, sizeof(g_can_id_counters));
+    g_can_id_counter_count = 0;
     
     // 2. Tx 큐 생성
     SALRetCode_t queueRet = SAL_QueueCreate(&g_canTxQueueHandle, 
@@ -423,8 +530,9 @@ static void CAN_TxTask_Loop(void *pArg)
                 rxPacket->body.raw[2] = temp_byte;
             }
             
-            // CRC 계산
-            rxPacket->body.field.CRC_8 = calculate_CRC8(rxPacket->body.raw, 7);
+            // Rolling Counter 설정 (ID별) 및 MAC 계산
+            rxPacket->body.field.counter = CAN_GetTxCounter((uint16_t)sTxMsg.mId);
+            rxPacket->body.field.MAC    = compute_mac(rxPacket->body.raw, 7, rxPacket->body.field.counter);
             
             // 데이터 복사
             SAL_MemCopy(sTxMsg.mData, rxPacket->body.raw, 8);
@@ -439,6 +547,7 @@ static void CAN_TxTask_Loop(void *pArg)
             }
             else
             {
+                CAN_IncTxCounter((uint16_t)sTxMsg.mId);  /* 송신 성공 시 counter 증가 */
                 mcu_printf("[CAN] MESSAGE SEND: 0x%03X ", sTxMsg.mId);
                 Print_Hex_8Bytes(rxPacket->body.raw);
             }
