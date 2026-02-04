@@ -13,6 +13,7 @@
 #include "can.h"  // dev.drivers의 CAN 헤더
 #include "utils.h"
 #include "matrix_led.h"
+#include "safety_belt.h"
 
 // can.c에서 extern으로 접근
 extern uint32 g_canTxQueueHandle;
@@ -32,6 +33,9 @@ void CAN_consume_rx_message(const void *pRxHeader, CAN_payload_t rxPayload)
     {
         case CAN_type_break_led:
             CAN_receive_led_signal(rxPayload.field.data.u8_val);
+            break;
+        case CAN_type_safety_belt:
+            SAFETYBELT_SetFromCan(rxPayload.raw[0]);
             break;
         default:
             break;

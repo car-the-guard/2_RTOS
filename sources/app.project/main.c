@@ -12,6 +12,7 @@
 #include "sonar.h"
 #include "collision.h"
 #include "matrix_led.h"
+#include "safety_belt.h"
 #include "scheduler.h"
 #include "can_app.h"
 #include "compass.h"
@@ -69,6 +70,8 @@ static void Main_StartTask(void * pArg)
     COMPASS_start_task();
     
     MATRIXLED_start_task();
+
+    SAFETYBELT_start_task();
 
     SCHEDULER_start_task();
 

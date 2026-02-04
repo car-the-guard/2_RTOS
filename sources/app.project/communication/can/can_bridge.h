@@ -9,6 +9,7 @@
 #define CAN_type_break_led    0x048
 
 #define CAN_type_collision    0x008
+#define CAN_type_safety_belt 0x009   /* 안전벨트 출력 제어 (raw[0]: 0xFF=ON, 0x00=OFF) */
 #define CAN_type_sonar        0x024   /* 초음파 거리 [cm] uint16 x2 */
 #define CAN_type_rel_velocity 0x02C   /* 상대 속도 [cm/s] uint32 */
 #define CAN_type_compass      0x084
