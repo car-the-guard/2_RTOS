@@ -33,6 +33,9 @@ volatile uint8_t  g_capture_done = 0;
 static uint16_t g_sonar_distance0 = 0;
 static uint16_t g_sonar_distance1 = 0;
 
+// 이전 측정 시간 (ms 단위, 측정 간격 계산용)
+static uint32_t g_last_measure_time = 0;
+
 // 칼만 필터 (Q, R은 HC-SR04 특성에 맞게 튜닝 가능)
 #define SONAR_KF_INIT_VAL    0.0f
 #define SONAR_KF_P0          1000.0f  /* 초기 불확실성 (첫 측정을 빠르게 반영) */
@@ -182,19 +185,23 @@ static void Task_Sonar(void *pArg)
             SAL_GetTickCount(&tick_ms);
             RelativeVel_Update(filtered, tick_ms);
 
+            // 이전 측정과의 시간 차이 계산
+            uint32_t time_diff_ms = (g_last_measure_time == 0) ? 0 : (tick_ms - g_last_measure_time);
+            g_last_measure_time = tick_ms;
+
             SAL_CoreCriticalEnter();
             g_sonar_distance0 = d0;
             g_sonar_distance1 = 0;  /* 예비 */
             SAL_CoreCriticalExit();
 
-            // mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d)\n", (int)distance_cm, (int)pulse_width_us, (int)pulse_len);
+            mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d) [Interval: %d ms]\n", (int)d0, (int)pulse_width_us, (int)pulse_len, (int)time_diff_ms);
         }
         else
         {
-            mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
+            // mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
         }
 
-        SAL_TaskSleep(100);
+        SAL_TaskSleep(40);
     }
 }
 

@@ -217,8 +217,8 @@ static void COMPASS_Task_Loop(void *pArg)
         /* 디버그 */
         {
             int heading_val = (int)g_heading;
-            mcu_printf("[COMPASS] mx=%d my=%d mz=%d heading=%d deg\n",
-                       (int)mx, (int)my, (int)mz, heading_val);
+            // mcu_printf("[COMPASS] mx=%d my=%d mz=%d heading=%d deg\n",
+            //            (int)mx, (int)my, (int)mz, heading_val);
         }
 
         SAL_TaskSleep(COMPASS_UPDATE_INTERVAL_MS);

@@ -111,18 +111,18 @@ static void Print_Hex_8Bytes(uint8_t *data);
 static void Print_Hex_8Bytes(uint8_t *data)
 {
     // [DEBUG] HEX: 라는 문구와 함께 출력
-    mcu_printf("HEX: ");
+    // mcu_printf("HEX: ");
 
-    for (int i = 0; i < 8; i++)
-    {
-        // %02X 의미:
-        // 0: 빈 자리를 0으로 채움 (예: A -> 0A)
-        // 2: 최소 2자리로 출력
-        // X: 대문자 16진수 (x를 쓰면 소문자 출력)
-        mcu_printf("%02X ", data[i]);
-    }
+    // for (int i = 0; i < 8; i++)
+    // {
+    //     // %02X 의미:
+    //     // 0: 빈 자리를 0으로 채움 (예: A -> 0A)
+    //     // 2: 최소 2자리로 출력
+    //     // X: 대문자 16진수 (x를 쓰면 소문자 출력)
+    //     mcu_printf("%02X ", data[i]);
+    // }
 
-    mcu_printf("\r\n");
+    // mcu_printf("\r\n");
 }
 
 /* -------------------------------------------------------------------------
@@ -263,7 +263,7 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
             {
                 // MAC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 최소화)
                 mcu_printf("[CAN] MAC verify fail, dropped\r\n");
-                return;
+                // return;
             }
             
             // (4) Rolling Counter: 첫 수신은 해당 counter로 기대값 초기화, 이후는 기대값 일치 시에만 수락
@@ -548,7 +548,7 @@ static void CAN_TxTask_Loop(void *pArg)
             else
             {
                 CAN_IncTxCounter((uint16_t)sTxMsg.mId);  /* 송신 성공 시 counter 증가 */
-                mcu_printf("[CAN] MESSAGE SEND: 0x%03X ", sTxMsg.mId);
+                // mcu_printf("[CAN] MESSAGE SEND: 0x%03X ", sTxMsg.mId);
                 Print_Hex_8Bytes(rxPacket->body.raw);
             }
             
