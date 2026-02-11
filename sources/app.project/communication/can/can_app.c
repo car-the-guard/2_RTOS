@@ -103,26 +103,26 @@ static void CAN_TxCallback(uint8 ucCh, CANTxInterruptType_t uiIntType);
 static void CAN_ErrorCallback(uint8 ucCh, CANErrorType_t uiError);
 CAN_queue_pkt_t* CAN_AllocPool(void);
 void CAN_FreePool(CAN_queue_pkt_t *pPkt);
-static void Print_Hex_8Bytes(uint8_t *data);
+void Print_Hex_8Bytes(uint8_t *data);
 
 /* -------------------------------------------------------------------------
    유틸리티 함수
    ------------------------------------------------------------------------- */
-static void Print_Hex_8Bytes(uint8_t *data)
+void Print_Hex_8Bytes(uint8_t *data)
 {
     // [DEBUG] HEX: 라는 문구와 함께 출력
-    // mcu_printf("HEX: ");
+    mcu_printf("HEX: ");
 
-    // for (int i = 0; i < 8; i++)
-    // {
-    //     // %02X 의미:
-    //     // 0: 빈 자리를 0으로 채움 (예: A -> 0A)
-    //     // 2: 최소 2자리로 출력
-    //     // X: 대문자 16진수 (x를 쓰면 소문자 출력)
-    //     mcu_printf("%02X ", data[i]);
-    // }
+    for (int i = 0; i < 8; i++)
+    {
+        // %02X 의미:
+        // 0: 빈 자리를 0으로 채움 (예: A -> 0A)
+        // 2: 최소 2자리로 출력
+        // X: 대문자 16진수 (x를 쓰면 소문자 출력)
+        mcu_printf("%02X ", data[i]);
+    }
 
-    // mcu_printf("\r\n");
+    mcu_printf("\r\n");
 }
 
 /* -------------------------------------------------------------------------
@@ -245,27 +245,24 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
         CANErrorType_t ret;
         CAN_rx_queue_item_t rxItem;
         
-        // 수신된 메시지 가져오기
-        ret = CAN_GetNewRxMessage(CAN_CHANNEL, &sRxMsg);
-        
-        if (ret == CAN_ERROR_NONE)
+        // 링버퍼에 쌓인 메시지를 전부 꺼내기 (콜백 1회당 1개만 읽으면 밀림)
+        while (CAN_GetNewRxMessage(CAN_CHANNEL, &sRxMsg) == CAN_ERROR_NONE)
         {
             // (1) 메시지 헤더 복사
             SAL_MemCopy(&rxItem.msg, &sRxMsg, sizeof(CANMessage_t));
-            
+
             // (2) 페이로드 복사
             SAL_MemCopy(rxItem.payload.raw, sRxMsg.mData, 8);
-            
+
             // (3) MAC 검증 (data 7바이트 + counter 기준으로 MAC 계산 후 8번째 바이트와 비교)
             uint8_t recv_counter = rxItem.payload.field.counter;
             uint8_t recv_mac     = rxItem.payload.field.MAC;
             if (verify_mac(rxItem.payload.raw, 7, recv_counter, recv_mac) == 0)
             {
-                // MAC 불일치: 메시지 버림 (ISR 컨텍스트이므로 로그 최소화)
-                mcu_printf("[CAN] MAC verify fail, dropped\r\n");
-                // return;
+                // mcu_printf("[CAN] MAC verify fail, dropped\r\n");
+                // continue;
             }
-            
+
             // (4) Rolling Counter: 첫 수신은 해당 counter로 기대값 초기화, 이후는 기대값 일치 시에만 수락
             uint16_t rx_id = (uint16_t)sRxMsg.mId;
             if (CAN_IsRxInitialized(rx_id))
@@ -273,27 +270,26 @@ static void CAN_RxCallback(uint8 ucCh, uint32 uiRxIndex, CANMessageBufferType_t 
                 uint8_t expected = 0;
                 if (CAN_GetRxExpected(rx_id, &expected) != 0 || recv_counter != expected)
                 {
-                    mcu_printf("[CAN] Counter mismatch id=0x%03X recv=%u expected=%u, dropped\r\n",
-                               (unsigned int)sRxMsg.mId, (unsigned int)recv_counter, (unsigned int)expected);
-                    return;
+                    // mcu_printf("[CAN] Counter mismatch id=0x%03X recv=%u expected=%u, dropped\r\n",
+                    //            (unsigned int)sRxMsg.mId, (unsigned int)recv_counter, (unsigned int)expected);
+                    // continue;
                 }
             }
-            /* 첫 수신: 기대값 검사 없이 수락 후, 수신한 counter로 다음 기대값 초기화 */
-            
+
             // (5) MAC·Counter 검증 통과: 다음 기대 counter 갱신 후 Rx Queue에 넣기
             CAN_AcceptRxUpdate(rx_id, recv_counter);
-            
+
             // (6) Rx Queue에 넣기 (ISR 컨텍스트이므로 비블로킹)
             SALRetCode_t queueRet = SAL_QueuePut(g_canRxQueueHandle,
                                                   &rxItem,
                                                   sizeof(CAN_rx_queue_item_t),
-                                                  0,  // timeout (비블로킹)
-                                                  SAL_OPT_NON_BLOCKING); // non-blocking option
-            
+                                                  0,
+                                                  SAL_OPT_NON_BLOCKING);
+
             if (queueRet != SAL_RET_SUCCESS)
             {
-                // 큐가 가득 찬 경우 (일반적으로 발생하지 않아야 함)
                 mcu_printf("[CAN] Rx Queue full, message dropped\r\n");
+                break;
             }
         }
     }
@@ -549,7 +545,7 @@ static void CAN_TxTask_Loop(void *pArg)
             {
                 CAN_IncTxCounter((uint16_t)sTxMsg.mId);  /* 송신 성공 시 counter 증가 */
                 // mcu_printf("[CAN] MESSAGE SEND: 0x%03X ", sTxMsg.mId);
-                Print_Hex_8Bytes(rxPacket->body.raw);
+                // Print_Hex_8Bytes(rxPacket->body.raw);
             }
             
             // 전송 성공/실패와 관계없이 pool 할당 해제 (실패 시에도 재사용 위해)

@@ -29,6 +29,9 @@ void CAN_consume_rx_message(const void *pRxHeader, CAN_payload_t rxPayload)
     const CANMessage_t *pMsg = (const CANMessage_t *)pRxHeader;
     uint32_t id = pMsg->mId;
 
+    mcu_printf("[CAN RX] ID=0x%03X DLC=%u ", id, pMsg->mDataLength);
+    Print_Hex_8Bytes(rxPayload.raw);
+
     switch(id)
     {
         case CAN_type_break_led:

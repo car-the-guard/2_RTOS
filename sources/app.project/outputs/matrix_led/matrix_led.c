@@ -194,6 +194,14 @@ void MATRIXLED_Init(void)
 
 void MATRIXLED_SetState(MatrixLed_State_t state)
 {
+    if (state == MATRIX_LED_OFF)
+    {
+        return;
+    }
+    if (current_led_state == state)
+    {
+        return;
+    }
     current_led_state = state;
 }
 

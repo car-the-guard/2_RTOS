@@ -17,7 +17,7 @@
 // 설정 및 전역 변수
 // =========================================================
 #define SONAR_TASK_STK_SIZE     (2048)
-#define SONAR_TASK_PRIO         (SAL_PRIO_APP_CFG)
+#define SONAR_TASK_PRIO         (SAL_PRIO_APP_CFG - 1)  /* 다른 센서들보다 우선순위 높게 */
 
 // 태스크 관련 변수
 static uint32 g_sonar_task_id = 0;
@@ -33,14 +33,20 @@ volatile uint8_t  g_capture_done = 0;
 static uint16_t g_sonar_distance0 = 0;
 static uint16_t g_sonar_distance1 = 0;
 
+// 이전 필터링된 값 (가중치 평균용)
+static float g_sonar_filtered_prev = 0.0f;
+
 // 이전 측정 시간 (ms 단위, 측정 간격 계산용)
 static uint32_t g_last_measure_time = 0;
 
 // 칼만 필터 (Q, R은 HC-SR04 특성에 맞게 튜닝 가능)
 #define SONAR_KF_INIT_VAL    0.0f
 #define SONAR_KF_P0          1000.0f  /* 초기 불확실성 (첫 측정을 빠르게 반영) */
-#define SONAR_KF_Q           0.05f    /* 프로세스 노이즈 (거리 변화 속도) */
-#define SONAR_KF_R           20.0f    /* 측정 노이즈 (센서 노이즈 수준) */
+#define SONAR_KF_Q           2.0f     /* 프로세스 노이즈 (거리 변화 속도) - 높을수록 빠른 반응 */
+#define SONAR_KF_R           2.0f     /* 측정 노이즈 (센서 노이즈 수준) - 낮을수록 측정값 신뢰 */
+
+// 가중치 평균 설정
+#define SONAR_WEIGHT_NEW     0.3f     /* 새 측정값의 가중치 (0.0~1.0) - 낮을수록 부드러움, 높을수록 빠른 반응 */
 static KalmanFilter1D_t g_sonar_kalman;
 
 
@@ -113,8 +119,9 @@ static void Task_Sonar(void *pArg)
 
     mcu_printf("SONAR Polling Mode Start\n");
 
-    // 칼만 필터, 상대 속도 추정기 초기화
-    KalmanFilter1D_Init(&g_sonar_kalman, SONAR_KF_INIT_VAL, SONAR_KF_P0, SONAR_KF_Q, SONAR_KF_R);
+    // 칼만 필터 초기화 (현재는 가중치 평균 사용)
+    // KalmanFilter1D_Init(&g_sonar_kalman, SONAR_KF_INIT_VAL, SONAR_KF_P0, SONAR_KF_Q, SONAR_KF_R);
+    g_sonar_filtered_prev = 0.0f;  // 가중치 평균 초기값
     RelativeVel_Init();
 
     // 1. 핀 설정 (입력 버퍼 필수!)
@@ -130,11 +137,9 @@ static void Task_Sonar(void *pArg)
         // -----------------------------------------------------
         // 1. Trigger 발송 (시간 넉넉하게)
         // -----------------------------------------------------
-        // mcu_printf("TRIG...\n");
         GPIO_Set(SONAR_TRIG_PIN, 1U);
-        SoftwareDelay_us(500); // 10us -> 500us로 대폭 증가
+        SoftwareDelay_us(15);  /* HC-SR04 권장값: 10-15us trigger pulse */
         GPIO_Set(SONAR_TRIG_PIN, 0U);
-        // mcu_printf("Waiting ECHO...\n");
 
         // -----------------------------------------------------
         // 2. Echo 신호 대기 (LOW -> HIGH 될 때까지 대기)
@@ -177,7 +182,12 @@ static void Task_Sonar(void *pArg)
             if (raw_cm > 65535.0f) raw_cm = 65535.0f;
 
             /* 칼만 필터 적용 (sonar.c는 적용만, 필터 구현은 utils/kalman_filter) */
-            float filtered = KalmanFilter1D_Update(&g_sonar_kalman, raw_cm);
+            // float filtered = KalmanFilter1D_Update(&g_sonar_kalman, raw_cm);
+            
+            /* 가중치 평균 필터 적용 */
+            float filtered = (SONAR_WEIGHT_NEW * raw_cm) + ((1.0f - SONAR_WEIGHT_NEW) * g_sonar_filtered_prev);
+            g_sonar_filtered_prev = filtered;  // 다음 루프를 위해 현재 필터링된 값 저장
+            
             uint16_t d0 = (filtered < 0.0f) ? 0 : (filtered > 65535.0f) ? 0xFFFF : (uint16_t)(filtered + 0.5f);
 
             /* 상대 속도 추정 (utils/relative_velocity) */
@@ -194,14 +204,14 @@ static void Task_Sonar(void *pArg)
             g_sonar_distance1 = 0;  /* 예비 */
             SAL_CoreCriticalExit();
 
-            mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d) [Interval: %d ms]\n", (int)d0, (int)pulse_width_us, (int)pulse_len, (int)time_diff_ms);
+            // mcu_printf("Dist: %d cm (Pulse: %d us, Loops: %d) [Interval: %d ms]\n", (int)d0, (int)pulse_width_us, (int)pulse_len, (int)time_diff_ms);
         }
         else
         {
             // mcu_printf("No Echo Signal (Sensor Fault or Wiring)\n");
         }
 
-        SAL_TaskSleep(40);
+        SAL_TaskSleep(50);  /* 측정 주기: 50ms (기존 100ms에서 개선) */
     }
 }
 

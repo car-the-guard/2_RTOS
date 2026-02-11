@@ -57,4 +57,7 @@ void CAN_FreePool(CAN_queue_pkt_t *pPkt);
 uint32 CAN_GetTxQueueCount(void);
 void CAN_IncrementTxQueueCount(void);
 
+// HEX 디버그 출력
+void Print_Hex_8Bytes(uint8_t *data);
+
 #endif /* CAN_APP_H */
